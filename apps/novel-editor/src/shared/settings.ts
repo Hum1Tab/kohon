@@ -20,6 +20,8 @@ export type AppCommandId =
   | "workbench.quickOpen"
   | "editor.find"
   | "editor.replace"
+  | "editor.undo"
+  | "editor.redo"
   | "editor.splitRight"
   | "editor.splitDown"
   | "editor.closeGroup"
@@ -66,6 +68,8 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "workbench.quickOpen", label: "章をクイック オープン", category: "表示", defaultBinding: "Mod+P" },
   { id: "editor.find", label: "本文内を検索", category: "編集", defaultBinding: "Mod+F" },
   { id: "editor.replace", label: "本文内を置換", category: "編集", defaultBinding: "Mod+Alt+F" },
+  { id: "editor.undo", label: "本文の変更を元に戻す", category: "編集", defaultBinding: "Mod+Z" },
+  { id: "editor.redo", label: "本文の変更をやり直す", category: "編集", defaultBinding: "Mod+Shift+Z" },
   { id: "editor.splitRight", label: "エディターを右に分割", category: "表示", defaultBinding: "Mod+\\" },
   { id: "editor.splitDown", label: "エディターを下に分割", category: "表示", defaultBinding: "" },
   { id: "editor.closeGroup", label: "現在のエディターグループを閉じる", category: "表示", defaultBinding: "" },
@@ -139,7 +143,7 @@ export type UserSettingsPatch = {
 };
 
 const DEFAULT_FONT = '"Yu Mincho", "Hiragino Mincho ProN", serif';
-const RESERVED_BINDINGS = new Set(["Mod+C", "Mod+X", "Mod+V", "Mod+A", "Mod+Z", "Mod+Shift+Z", "Mod+Q"]);
+const RESERVED_BINDINGS = new Set(["Mod+C", "Mod+X", "Mod+V", "Mod+A", "Mod+Q"]);
 
 export function defaultKeybindings(): KeybindingMap {
   return Object.fromEntries(COMMAND_DEFINITIONS.map((command) => [command.id, command.defaultBinding])) as KeybindingMap;

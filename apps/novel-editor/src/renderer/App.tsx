@@ -5,6 +5,7 @@ import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../s
 import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConflict, editBuffer, loadBuffer, pruneBuffers, saveFailed, saveSucceeded, type EditorBuffersState } from "../shared/editor-buffers.js";
 import { closeEditorGroup, closeEditorTab, defaultEditorSession, moveEditorTab, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
+import { clearTextHistory, createEditorHistory, recordTextEdit, redoTextEdit, undoTextEdit, type EditOrigin, type TextSelection } from "../shared/editor-history.js";
 import { insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
 import {
   COMMAND_DEFINITIONS,
@@ -60,6 +61,7 @@ import { DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, Se
 type QuickAccessMode = "commands" | "chapters";
 type EditorTabDragState = { groupId: EditorGroupId; chapterId: string };
 type EditorTabDropState = { groupId: EditorGroupId; index: number };
+type EditorInputSnapshot = { groupId: EditorGroupId; chapterId: string; text: string; selection: TextSelection; origin?: EditOrigin };
 type DropTarget =
   | { kind: "slot-tab"; slot: SlotId; index: number }
   | { kind: "side-edge"; side: PhysicalSide }
@@ -195,6 +197,10 @@ export function App(): ReactNode {
   const activeNoteRef = useRef<NoteDocument | null>(null);
   const noteDraftRef = useRef<NoteDraft | null>(null);
   const noteSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const editorHistoryRef = useRef(createEditorHistory());
+  const pendingInputRef = useRef<EditorInputSnapshot | null>(null);
+  const compositionRef = useRef<EditorInputSnapshot | null>(null);
+  const skipCompositionInputRef = useRef<{ chapterId: string; text: string } | null>(null);
 
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -353,10 +359,13 @@ export function App(): ReactNode {
   useEffect(() => { noteDraftRef.current = noteDraft; }, [noteDraft]);
   useEffect(() => { editorRef.current = editorRefs.current[editorSession.activeGroupId] ?? null; }, [editorSession.activeGroupId, editorSession.groups.length]);
 
-  const setText = useCallback((value: string): void => {
-    if (activeChapterId === null) return;
-    setEditorBuffers((current) => editBuffer(current, activeChapterId, value));
-  }, [activeChapterId]);
+  const updateBufferText = useCallback((chapterId: string, value: string): void => {
+    setEditorBuffers((current) => {
+      const next = editBuffer(current, chapterId, value);
+      editorBuffersRef.current = next;
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (project === null || sessionHydratedRootRef.current !== project.root) return;
@@ -491,6 +500,48 @@ export function App(): ReactNode {
     }, 60);
   }, []);
 
+  const commitActiveTextEdit = useCallback((nextText: string, selectionAfter: TextSelection, origin: EditOrigin): void => {
+    if (activeChapterId === null) return;
+    const editor = editorRef.current;
+    const beforeText = editor?.value ?? editorBuffersRef.current.buffers[activeChapterId]?.text ?? "";
+    const selectionBefore = editor === null
+      ? { start: beforeText.length, end: beforeText.length }
+      : { start: editor.selectionStart, end: editor.selectionEnd };
+    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
+      chapterId: activeChapterId,
+      beforeText,
+      afterText: nextText,
+      selectionBefore,
+      selectionAfter,
+      origin,
+      timestamp: Date.now()
+    });
+    textRef.current = nextText;
+    updateBufferText(activeChapterId, nextText);
+    setEditorSession((current) => updateEditorTabView(current, current.activeGroupId, activeChapterId, { selectionStart: selectionAfter.start, selectionEnd: selectionAfter.end }));
+    focusRange(selectionAfter.start, selectionAfter.end);
+  }, [activeChapterId, focusRange, updateBufferText]);
+
+  const stepEditorHistory = useCallback((direction: "undo" | "redo"): void => {
+    const editor = editorRef.current;
+    if (isComposing || compositionRef.current !== null || activeChapterId === null || editor === null) return;
+    if (document.activeElement !== editor) {
+      document.execCommand(direction);
+      return;
+    }
+    const result = direction === "undo"
+      ? undoTextEdit(editorHistoryRef.current, activeChapterId)
+      : redoTextEdit(editorHistoryRef.current, activeChapterId);
+    if (result.edit === null) return;
+    editorHistoryRef.current = result.history;
+    const nextText = direction === "undo" ? result.edit.beforeText : result.edit.afterText;
+    const selection = direction === "undo" ? result.edit.selectionBefore : result.edit.selectionAfter;
+    textRef.current = nextText;
+    updateBufferText(activeChapterId, nextText);
+    setEditorSession((current) => updateEditorTabView(current, current.activeGroupId, activeChapterId, { selectionStart: selection.start, selectionEnd: selection.end }));
+    focusRange(selection.start, selection.end);
+  }, [activeChapterId, focusRange, isComposing, updateBufferText]);
+
   const restoreEditorView = useCallback((view: EditorTabState | undefined): void => {
     if (view === undefined) return;
     window.setTimeout(() => {
@@ -531,23 +582,20 @@ export function App(): ReactNode {
 
   const replaceCurrentMatch = useCallback((): void => {
     if (isComposing || findMatches.length === 0) return;
-    const match = findMatches[Math.min(findMatchIndex, findMatches.length - 1)]!;
+    const match = findMatches[Math.max(0, Math.min(findMatchIndex, findMatches.length - 1))]!;
     const result = replaceTextMatch(text, match, replacement);
-    textRef.current = result.text;
-    setText(result.text);
-    focusRange(result.caret, result.caret);
-  }, [findMatchIndex, findMatches, focusRange, isComposing, replacement, text]);
+    commitActiveTextEdit(result.text, { start: result.caret, end: result.caret }, "find-replace");
+  }, [commitActiveTextEdit, findMatchIndex, findMatches, isComposing, replacement, text]);
 
   const replaceEveryMatch = useCallback((): void => {
     if (isComposing || findQuery.length === 0) return;
     const result = replaceAllLiteral(text, findQuery, replacement, caseSensitive);
     if (result.count === 0) return;
-    textRef.current = result.text;
-    setText(result.text);
+    const caret = Math.min(editorRef.current?.selectionStart ?? 0, result.text.length);
+    commitActiveTextEdit(result.text, { start: caret, end: caret }, "find-replace");
     setFindMatchIndex(-1);
     setNotice(`${result.count}件を置換しました。`);
-    window.requestAnimationFrame(() => editorRef.current?.focus());
-  }, [caseSensitive, findQuery, isComposing, replacement, text]);
+  }, [caseSensitive, commitActiveTextEdit, findQuery, isComposing, replacement, text]);
 
   const displayChapter = useCallback(async (root: string, next: ChapterDocument, view?: EditorTabState, range?: { start: number; end: number }, restoreView = true): Promise<void> => {
     let recovery: RecoveryDraftResult | null = null;
@@ -566,6 +614,11 @@ export function App(): ReactNode {
   }, [focusRange, restoreEditorView]);
 
   const reloadOpenBuffers = useCallback(async (root: string, sessionState: EditorSessionState): Promise<void> => {
+    editorHistoryRef.current = createEditorHistory();
+    pendingInputRef.current = null;
+    compositionRef.current = null;
+    skipCompositionInputRef.current = null;
+    setIsComposing(false);
     setEditorBuffers(createEditorBuffers());
     const activeGroup = sessionState.groups.find((group) => group.id === sessionState.activeGroupId) ?? sessionState.groups[0];
     const loaded = new Set<string>();
@@ -692,6 +745,7 @@ export function App(): ReactNode {
     if (recoveryConflict === null) return;
     const draft = recoveryConflict.draft;
     textRef.current = draft.text;
+    editorHistoryRef.current = clearTextHistory(editorHistoryRef.current, draft.chapterId);
     if (activeChapterId !== null) setEditorBuffers((current) => applyRecoveryDraft(current, activeChapterId));
     restoreEditorView(draft);
     setNotice("復旧ドラフトを本文へ戻しました。自動保存します。");
@@ -890,6 +944,7 @@ export function App(): ReactNode {
       await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」削除前`);
       const oldIndex = activeIndex;
       await window.novelLens.deleteChapter(project.root, chapter.chapter.id);
+      editorHistoryRef.current = clearTextHistory(editorHistoryRef.current, chapter.chapter.id);
       const refreshed = await refreshProject();
       const next = refreshed?.manifest.chapters[Math.max(0, Math.min(oldIndex, (refreshed?.manifest.chapters.length ?? 1) - 1))];
       if (next !== undefined) {
@@ -1009,6 +1064,7 @@ export function App(): ReactNode {
     try {
       await saveAllBuffers();
       const restored = await window.novelLens.restoreCheckpoint(project.root, entry.commit);
+      editorHistoryRef.current = createEditorHistory();
       setProject(restored);
       setEditorBuffers(createEditorBuffers());
       const desired = restored.manifest.chapters.find((item) => item.id === activeChapterId) ?? restored.manifest.chapters[0];
@@ -1365,11 +1421,8 @@ export function App(): ReactNode {
     if (isComposing || activeChapterId === null || editor === null) return;
     if (requireSelection && editor.selectionStart === editor.selectionEnd) { setError("本文の対象範囲を選択してください。"); return; }
     const result = transform({ text: editor.value, selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd });
-    textRef.current = result.nextText;
-    setText(result.nextText);
-    setEditorSession((current) => updateEditorTabView(current, current.activeGroupId, activeChapterId, { selectionStart: result.nextSelectionStart, selectionEnd: result.nextSelectionEnd }));
-    focusRange(result.nextSelectionStart, result.nextSelectionEnd);
-  }, [activeChapterId, focusRange, isComposing, setText]);
+    commitActiveTextEdit(result.nextText, { start: result.nextSelectionStart, end: result.nextSelectionEnd }, "japanese-helper");
+  }, [activeChapterId, commitActiveTextEdit, isComposing]);
 
   const insertRuby = useCallback(async (): Promise<void> => {
     const editor = editorRef.current;
@@ -1413,6 +1466,8 @@ export function App(): ReactNode {
     else if (action === "workbench.quickOpen") openQuickAccess("chapters");
     else if (action === "editor.find") openEditorFind(false);
     else if (action === "editor.replace") openEditorFind(true);
+    else if (action === "editor.undo") stepEditorHistory("undo");
+    else if (action === "editor.redo") stepEditorHistory("redo");
     else if (action === "editor.splitRight") splitActiveEditor("right");
     else if (action === "editor.splitDown") splitActiveEditor("down");
     else if (action === "editor.closeGroup") void closeActiveEditorGroup();
@@ -1443,7 +1498,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, userSettings.layout]);
+  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, stepEditorHistory, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;
@@ -1700,6 +1755,88 @@ export function App(): ReactNode {
     setEditorTabDrop(null);
   };
 
+  const beginEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
+    activateEditorGroup(groupId);
+    pendingInputRef.current = null;
+    skipCompositionInputRef.current = null;
+    compositionRef.current = {
+      groupId,
+      chapterId,
+      text: editor.value,
+      selection: { start: editor.selectionStart, end: editor.selectionEnd }
+    };
+    setIsComposing(true);
+  }, [activateEditorGroup]);
+
+  const finishEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
+    const started = compositionRef.current;
+    compositionRef.current = null;
+    pendingInputRef.current = null;
+    setIsComposing(false);
+    if (started === null || started.groupId !== groupId || started.chapterId !== chapterId) return;
+    const selectionAfter = { start: editor.selectionStart, end: editor.selectionEnd };
+    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
+      chapterId,
+      beforeText: started.text,
+      afterText: editor.value,
+      selectionBefore: started.selection,
+      selectionAfter,
+      origin: "ime-commit",
+      timestamp: Date.now()
+    });
+    skipCompositionInputRef.current = { chapterId, text: editor.value };
+    textRef.current = editor.value;
+    updateBufferText(chapterId, editor.value);
+    setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: selectionAfter.start, selectionEnd: selectionAfter.end }));
+  }, [updateBufferText]);
+
+  const captureEditorInput = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, nativeComposing: boolean, inputType: string): void => {
+    if (nativeComposing || compositionRef.current !== null) return;
+    skipCompositionInputRef.current = null;
+    pendingInputRef.current = {
+      groupId,
+      chapterId,
+      text: editor.value,
+      selection: { start: editor.selectionStart, end: editor.selectionEnd },
+      origin: inputType === "insertText" || inputType.startsWith("deleteContent") ? "typing" : "input"
+    };
+  }, []);
+
+  const changeEditorText = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, groupActive: boolean): void => {
+    const skipped = skipCompositionInputRef.current;
+    if (skipped?.chapterId === chapterId && skipped.text === editor.value) {
+      skipCompositionInputRef.current = null;
+      if (groupActive) textRef.current = editor.value;
+      updateBufferText(chapterId, editor.value);
+      return;
+    }
+    const composing = compositionRef.current;
+    if (composing?.groupId === groupId && composing.chapterId === chapterId) {
+      if (groupActive) textRef.current = editor.value;
+      updateBufferText(chapterId, editor.value);
+      return;
+    }
+    const pending = pendingInputRef.current;
+    pendingInputRef.current = null;
+    const beforeText = pending?.groupId === groupId && pending.chapterId === chapterId
+      ? pending.text
+      : editorBuffersRef.current.buffers[chapterId]?.text ?? "";
+    const selectionBefore = pending?.groupId === groupId && pending.chapterId === chapterId
+      ? pending.selection
+      : { start: Math.min(editor.selectionStart, beforeText.length), end: Math.min(editor.selectionEnd, beforeText.length) };
+    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
+      chapterId,
+      beforeText,
+      afterText: editor.value,
+      selectionBefore,
+      selectionAfter: { start: editor.selectionStart, end: editor.selectionEnd },
+      origin: pending?.origin ?? "input",
+      timestamp: Date.now()
+    });
+    if (groupActive) textRef.current = editor.value;
+    updateBufferText(chapterId, editor.value);
+  }, [updateBufferText]);
+
   const renderEditorGroup = (group: EditorSessionState["groups"][number]): ReactNode => {
     const groupChapterId = group.activeChapterId;
     const buffer = groupChapterId === null ? undefined : editorBuffers.buffers[groupChapterId];
@@ -1755,12 +1892,19 @@ export function App(): ReactNode {
           value={buffer?.text ?? ""}
           spellCheck={false}
           onFocus={() => activateEditorGroup(group.id)}
-          onCompositionStart={() => { activateEditorGroup(group.id); setIsComposing(true); }}
-          onCompositionEnd={() => setIsComposing(false)}
-          onChange={(event) => { if (groupChapterId === null) return; if (groupActive) textRef.current = event.target.value; setEditorBuffers((current) => editBuffer(current, groupChapterId, event.target.value)); }}
+          onBeforeInput={(event) => { const input = event.nativeEvent as InputEvent; if (groupChapterId !== null) captureEditorInput(group.id, groupChapterId, event.currentTarget, input.isComposing, input.inputType); }}
+          onCompositionStart={(event) => { if (groupChapterId !== null) beginEditorComposition(group.id, groupChapterId, event.currentTarget); }}
+          onCompositionEnd={(event) => { if (groupChapterId !== null) finishEditorComposition(group.id, groupChapterId, event.currentTarget); }}
+          onChange={(event) => { if (groupChapterId !== null) changeEditorText(group.id, groupChapterId, event.currentTarget, groupActive); }}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || compositionRef.current !== null || (!event.metaKey && !event.ctrlKey) || event.altKey) return;
+            const key = event.key.toLowerCase();
+            if (key === "z") { event.preventDefault(); stepEditorHistory(event.shiftKey ? "redo" : "undo"); }
+            else if (key === "y" && !event.shiftKey) { event.preventDefault(); stepEditorHistory("redo"); }
+          }}
           onSelect={(event) => { if (groupChapterId !== null) recordEditorView(group.id, groupChapterId, event.currentTarget); }}
           onScroll={(event) => { if (groupChapterId !== null) recordEditorView(group.id, groupChapterId, event.currentTarget); }}
-          onBlur={(event) => { if (groupChapterId === null) return; recordEditorView(group.id, groupChapterId, event.currentTarget); void saveChapterBuffer(groupChapterId); }}
+          onBlur={(event) => { if (groupChapterId === null) return; if (pendingInputRef.current?.groupId === group.id) pendingInputRef.current = null; recordEditorView(group.id, groupChapterId, event.currentTarget); void saveChapterBuffer(groupChapterId); }}
           disabled={buffer === undefined}
           placeholder="ここから物語を書き始めます。"
         />
