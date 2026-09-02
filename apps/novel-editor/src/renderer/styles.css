@@ -241,6 +241,26 @@ body.is-resizing * { cursor: inherit !important; }
 .chapter.drag-source { opacity: .45; }
 .chapter.drop-before { border-top-color: var(--nl-accent); }
 .chapter.drop-after { border-bottom-color: var(--nl-accent); }
+.outline-notes { max-height: 48%; flex: 0 1 auto; overflow: auto; border-top: 1px solid var(--nl-line); }
+.outline-notes > summary { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; gap: 8px; padding: 9px 12px; color: var(--nl-text); background: var(--nl-surface); cursor: pointer; font-size: 11px; font-weight: 700; }
+.outline-notes > summary small { color: var(--nl-muted); font-weight: 400; }
+.note-toolbar { display: flex; justify-content: space-between; padding: 4px 9px; }
+.note-list { padding: 0 8px; }
+.note-list > button { width: 100%; display: flex; justify-content: space-between; gap: 7px; padding: 7px; color: var(--nl-text); background: transparent; border: 0; border-radius: 5px; text-align: left; }
+.note-list > button:hover, .note-list > button.active { background: var(--nl-accent-soft); }
+.note-list > button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-list > button small { flex: 0 0 auto; color: var(--nl-muted); font-size: 8px; }
+.note-editor { display: grid; gap: 6px; margin: 8px; padding: 8px; background: var(--nl-surface-subtle); border: 1px solid var(--nl-line); border-radius: 7px; }
+.note-editor.archived { opacity: .72; }
+.note-editor-head, .note-meta-row, .note-actions { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.note-editor-head { color: var(--nl-muted); font-size: 9px; }
+.note-editor-head b { color: var(--nl-gold); }
+.note-editor input[type="text"], .note-editor > input, .note-editor select, .note-editor textarea { min-width: 0; width: 100%; color: var(--nl-text); background: var(--nl-surface-raised); border: 1px solid var(--nl-line); border-radius: 5px; }
+.note-editor > input, .note-editor select { height: 28px; padding: 4px 7px; }
+.note-editor textarea { resize: vertical; padding: 7px; font: 11px/1.6 var(--nl-font-ui); }
+.note-meta-row select { width: 86px; }
+.note-meta-row label { display: flex; align-items: center; gap: 4px; color: var(--nl-muted); font-size: 9px; white-space: nowrap; }
+.note-actions { justify-content: flex-end; }
 .outline-footer { padding: 12px; color: var(--nl-muted); border-top: 1px solid var(--nl-line); font-size: 10px; }
 .outline-footer code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

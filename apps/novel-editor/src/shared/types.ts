@@ -1,9 +1,9 @@
 import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ChapterKind, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
+import type { Chapter, ChapterKind, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
-export type { Chapter, ChapterKind, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
+export type { Chapter, ChapterKind, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 export type { EditorSessionState } from "./editor-session.js";
 
@@ -217,6 +217,11 @@ export interface NovelLensApi {
   listReviewFindings(root: string): Promise<ReviewLedgerEntry[]>;
   setReviewFindingStatus(root: string, id: string, status: ReviewStatus): Promise<ReviewLedgerEntry[]>;
   recheckReviewFinding(root: string, id: string): Promise<ReviewLedgerEntry[]>;
+  listNotes(root: string): Promise<NoteMeta[]>;
+  readNote(root: string, id: string): Promise<NoteDocument>;
+  createNote(root: string, title: string, kind: NoteKind, chapterIds: string[]): Promise<NoteDocument>;
+  saveNote(root: string, id: string, title: string, kind: NoteKind, chapterIds: string[], text: string): Promise<NoteDocument>;
+  setNoteArchived(root: string, id: string, archived: boolean): Promise<NoteMeta[]>;
   connectionStatus(): Promise<ConnectionStatus>;
   loginCodex(): Promise<ConnectionStatus>;
   logoutCodex(): Promise<ConnectionStatus>;

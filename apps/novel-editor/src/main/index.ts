@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/pr
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-import { ProjectStore, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
+import { ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";
@@ -392,6 +392,23 @@ function registerIpc(): void {
   handle("reviews:recheck", async (root, id) => {
     if (typeof id !== "string" || id.length > 100) throw new Error("指摘を確認してください。");
     return (await storeFor(root)).recheckReviewFinding(id);
+  });
+  handle("notes:list", async (root) => (await storeFor(root)).listNotes());
+  handle("notes:read", async (root, id) => {
+    if (typeof id !== "string" || id.length > 100) throw new Error("メモを確認してください。");
+    return (await storeFor(root)).readNote(id);
+  });
+  handle("notes:create", async (root, title, kind, chapterIds) => {
+    if (typeof title !== "string" || title.trim().length === 0 || title.length > 200 || (kind !== "character" && kind !== "place" && kind !== "world" && kind !== "plot" && kind !== "memo") || !Array.isArray(chapterIds) || chapterIds.length > 200 || chapterIds.some(id => typeof id !== "string")) throw new Error("メモの内容を確認してください。");
+    return (await storeFor(root)).createNote(title, kind as NoteKind, chapterIds, "");
+  });
+  handle("notes:save", async (root, id, title, kind, chapterIds, text) => {
+    if (typeof id !== "string" || id.length > 100 || typeof title !== "string" || title.trim().length === 0 || title.length > 200 || (kind !== "character" && kind !== "place" && kind !== "world" && kind !== "plot" && kind !== "memo") || !Array.isArray(chapterIds) || chapterIds.length > 200 || chapterIds.some(chapterId => typeof chapterId !== "string") || typeof text !== "string" || text.length > 2_000_000) throw new Error("メモの内容を確認してください。");
+    return (await storeFor(root)).saveNote(id, title, kind as NoteKind, chapterIds, text);
+  });
+  handle("notes:archive", async (root, id, archived) => {
+    if (typeof id !== "string" || id.length > 100 || typeof archived !== "boolean") throw new Error("メモを確認してください。");
+    return (await storeFor(root)).setNoteArchived(id, archived);
   });
   handle("connections:status", () => connections.refreshStatus());
   handle("connections:codex-login", () => connections.loginCodex(async (target) => {

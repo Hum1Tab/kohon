@@ -38,6 +38,9 @@ import type {
   LensProviderId,
   LensRunResult,
   LensScopeMode,
+  NoteDocument,
+  NoteKind,
+  NoteMeta,
   ProjectSettings,
   ProjectDiff,
   ProjectSummary,
@@ -58,6 +61,7 @@ type SaveState = "saved" | "dirty" | "saving" | "error";
 type QuickAccessMode = "commands" | "chapters";
 type EditorTabDragState = { groupId: EditorGroupId; chapterId: string };
 type EditorTabDropState = { groupId: EditorGroupId; index: number };
+type NoteDraft = { id: string; title: string; kind: NoteKind; chapterIds: string[]; text: string };
 
 type DropTarget =
   | { kind: "slot-tab"; slot: SlotId; index: number }
@@ -132,6 +136,14 @@ function settingNumber(settings: ProjectSettings, key: string, fallback: number)
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function draftFromNote(document: NoteDocument): NoteDraft {
+  return { id: document.note.id, title: document.note.title, kind: document.note.kind, chapterIds: [...document.note.chapterIds], text: document.text };
+}
+
+function noteDraftMatches(document: NoteDocument | null, draft: NoteDraft | null): boolean {
+  return document !== null && draft !== null && document.note.id === draft.id && document.note.title === draft.title.trim() && document.note.kind === draft.kind && document.text === draft.text && document.note.chapterIds.length === draft.chapterIds.length && document.note.chapterIds.every((id, index) => id === draft.chapterIds[index]);
+}
+
 export function App(): ReactNode {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [userSettings, setUserSettings] = useState(defaultUserSettings);
@@ -182,6 +194,11 @@ export function App(): ReactNode {
   const [editorTabDrop, setEditorTabDrop] = useState<EditorTabDropState | null>(null);
   const [chapterDragId, setChapterDragId] = useState<string | null>(null);
   const [chapterDropIndex, setChapterDropIndex] = useState<number | null>(null);
+  const [notes, setNotes] = useState<NoteMeta[]>([]);
+  const [activeNote, setActiveNote] = useState<NoteDocument | null>(null);
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
+  const [noteSaveState, setNoteSaveState] = useState<SaveState>("saved");
+  const [showAllNotes, setShowAllNotes] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const editorRefs = useRef<Partial<Record<EditorGroupId, HTMLTextAreaElement>>>({});
   const textRef = useRef("");
@@ -196,6 +213,9 @@ export function App(): ReactNode {
   const suppressDockClickRef = useRef(false);
   const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
   const promptSequenceRef = useRef(0);
+  const activeNoteRef = useRef<NoteDocument | null>(null);
+  const noteDraftRef = useRef<NoteDraft | null>(null);
+  const noteSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -350,6 +370,8 @@ export function App(): ReactNode {
 
   useEffect(() => { textRef.current = text; }, [text]);
   useEffect(() => { editorBuffersRef.current = editorBuffers; }, [editorBuffers]);
+  useEffect(() => { activeNoteRef.current = activeNote; }, [activeNote]);
+  useEffect(() => { noteDraftRef.current = noteDraft; }, [noteDraft]);
   useEffect(() => { editorRef.current = editorRefs.current[editorSession.activeGroupId] ?? null; }, [editorSession.activeGroupId, editorSession.groups.length]);
 
   const setText = useCallback((value: string): void => {
@@ -425,14 +447,39 @@ export function App(): ReactNode {
     return operation;
   }, [currentDraftInput, project]);
 
+  const saveActiveNote = useCallback(async (): Promise<void> => {
+    if (project === null) return;
+    const document = activeNoteRef.current;
+    const currentDraft = noteDraftRef.current;
+    if (document === null || currentDraft === null || noteDraftMatches(document, currentDraft)) return;
+    const snapshot = { ...currentDraft, title: currentDraft.title.trim(), chapterIds: [...currentDraft.chapterIds] };
+    if (snapshot.title.length === 0) { setNoteSaveState("error"); setError("メモのタイトルを入力してください。"); throw new Error("メモのタイトルを入力してください。"); }
+    setNoteSaveState("saving");
+    const operation = noteSaveQueueRef.current.catch(() => undefined).then(async () => {
+      try {
+        const saved = await window.novelLens.saveNote(project.root, snapshot.id, snapshot.title, snapshot.kind, snapshot.chapterIds, snapshot.text);
+        activeNoteRef.current = saved;
+        setActiveNote(saved);
+        setNotes((current) => current.map((note) => note.id === saved.note.id ? saved.note : note));
+        const latest = noteDraftRef.current;
+        const unchanged = latest !== null && latest.id === snapshot.id && latest.title.trim() === snapshot.title && latest.kind === snapshot.kind && latest.text === snapshot.text && latest.chapterIds.length === snapshot.chapterIds.length && latest.chapterIds.every((id, index) => id === snapshot.chapterIds[index]);
+        if (unchanged) { const clean = draftFromNote(saved); noteDraftRef.current = clean; setNoteDraft(clean); setNoteSaveState("saved"); }
+        else setNoteSaveState("dirty");
+      } catch (cause) { setNoteSaveState("error"); setError(errorText(cause)); throw cause; }
+    });
+    noteSaveQueueRef.current = operation;
+    return operation;
+  }, [project]);
+
   const saveNow = useCallback(async (): Promise<void> => {
     if (activeChapterId !== null) await saveChapterBuffer(activeChapterId);
   }, [activeChapterId, saveChapterBuffer]);
 
   const saveAllBuffers = useCallback(async (): Promise<void> => {
-    await Promise.all(Object.keys(editorBuffersRef.current.buffers).map((chapterId) => saveChapterBuffer(chapterId)));
+    await Promise.all([saveActiveNote(), ...Object.keys(editorBuffersRef.current.buffers).map((chapterId) => saveChapterBuffer(chapterId))]);
     await saveQueueRef.current;
-  }, [saveChapterBuffer]);
+    await noteSaveQueueRef.current;
+  }, [saveActiveNote, saveChapterBuffer]);
 
   useEffect(() => {
     if (text === savedText) return;
@@ -440,6 +487,13 @@ export function App(): ReactNode {
     const timer = window.setTimeout(() => { void saveNow(); }, userSettings.general.autoSaveDelayMs);
     return () => window.clearTimeout(timer);
   }, [activeChapterId, isComposing, project, recoveryConflict, saveNow, saveState, savedText, text, userSettings.general.autoSaveDelayMs]);
+
+  useEffect(() => {
+    if (noteDraftMatches(activeNote, noteDraft) || noteDraft === null || activeNote === null) return;
+    setNoteSaveState("dirty");
+    const timer = window.setTimeout(() => { void saveActiveNote().catch(() => undefined); }, userSettings.general.autoSaveDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [activeNote, noteDraft, saveActiveNote, userSettings.general.autoSaveDelayMs]);
 
   useEffect(() => {
     if (project === null || activeChapterId === null || text === savedText || activeBuffer === undefined || activeBuffer.version.length === 0 || isComposing || recoveryConflict?.draft.chapterId === activeChapterId) return;
@@ -570,9 +624,12 @@ export function App(): ReactNode {
     if (next === null) return;
     const restoredSession = await window.novelLens.readEditorSession(next.root);
     let restoredReviews: ReviewLedgerEntry[] = [];
+    let restoredNotes: NoteMeta[] = [];
     let reviewWarning: string | null = null;
     try { restoredReviews = await window.novelLens.listReviewFindings(next.root); }
     catch (cause) { reviewWarning = `指摘台帳を読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
+    try { restoredNotes = await window.novelLens.listNotes(next.root); }
+    catch (cause) { reviewWarning = `${reviewWarning === null ? "" : `${reviewWarning} `}作業メモを読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
     sessionHydratedRootRef.current = next.root;
     setProject(next);
     setEditorSession(restoredSession);
@@ -580,6 +637,11 @@ export function App(): ReactNode {
     setThreads(EMPTY_THREADS());
     setLensResult(null);
     setReviewFindings(restoredReviews);
+    setNotes(restoredNotes);
+    setActiveNote(null); activeNoteRef.current = null;
+    setNoteDraft(null); noteDraftRef.current = null;
+    setNoteSaveState("saved");
+    setShowAllNotes(false);
     setSearchHits([]);
     setCheckpoints([]);
     setHistoryDiff(null);
@@ -757,6 +819,56 @@ export function App(): ReactNode {
     try { setProject(await window.novelLens.reorderChapters(project.root, ids)); }
     catch (cause) { setError(errorText(cause)); }
   }, [chapterDragId, manifestChapters, project]);
+
+  const updateNoteDraft = useCallback((patch: Partial<Omit<NoteDraft, "id">>): void => {
+    const current = noteDraftRef.current;
+    if (current === null) return;
+    const next = { ...current, ...patch };
+    noteDraftRef.current = next;
+    setNoteDraft(next);
+    setNoteSaveState("dirty");
+  }, []);
+
+  const openNote = useCallback(async (id: string): Promise<void> => {
+    if (project === null) return;
+    try {
+      await saveActiveNote();
+      const document = await window.novelLens.readNote(project.root, id);
+      const draft = draftFromNote(document);
+      activeNoteRef.current = document; noteDraftRef.current = draft;
+      setActiveNote(document); setNoteDraft(draft); setNoteSaveState("saved");
+    } catch (cause) { setError(errorText(cause)); }
+  }, [project, saveActiveNote]);
+
+  const createNote = useCallback(async (): Promise<void> => {
+    if (project === null) return;
+    const title = await requestText({ title: "作業メモを追加", label: "タイトル", initialValue: "新しいメモ", confirmLabel: "追加する" });
+    if (title === null) return;
+    try {
+      await saveActiveNote();
+      const document = await window.novelLens.createNote(project.root, title, "memo", activeChapterId === null ? [] : [activeChapterId]);
+      const draft = draftFromNote(document);
+      activeNoteRef.current = document; noteDraftRef.current = draft;
+      setNotes((current) => [...current, document.note]); setActiveNote(document); setNoteDraft(draft); setNoteSaveState("saved");
+    } catch (cause) { setError(errorText(cause)); }
+  }, [activeChapterId, project, requestText, saveActiveNote]);
+
+  const toggleCurrentChapterPin = useCallback((): void => {
+    if (activeChapterId === null || noteDraftRef.current === null) return;
+    const pinned = noteDraftRef.current.chapterIds.includes(activeChapterId);
+    updateNoteDraft({ chapterIds: pinned ? noteDraftRef.current.chapterIds.filter((id) => id !== activeChapterId) : [...noteDraftRef.current.chapterIds, activeChapterId] });
+  }, [activeChapterId, updateNoteDraft]);
+
+  const setActiveNoteArchived = useCallback(async (archived: boolean): Promise<void> => {
+    if (project === null || activeNoteRef.current === null) return;
+    try {
+      await saveActiveNote();
+      const updated = await window.novelLens.setNoteArchived(project.root, activeNoteRef.current.note.id, archived);
+      setNotes(updated);
+      const note = updated.find((candidate) => candidate.id === activeNoteRef.current?.note.id);
+      if (note !== undefined && activeNoteRef.current !== null) { const document = { ...activeNoteRef.current, note }; activeNoteRef.current = document; setActiveNote(document); }
+    } catch (cause) { setError(errorText(cause)); }
+  }, [project, saveActiveNote]);
 
   const renameProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -1316,10 +1428,11 @@ export function App(): ReactNode {
       for (const buffer of buffers) {
         if (buffer.text !== buffer.savedText && buffer.version.length > 0) await window.novelLens.writeRecoveryDraft(project.root, currentDraftInput(buffer.chapter.id, buffer.text, buffer.version));
       }
-      await Promise.all(buffers.map((buffer) => saveChapterBuffer(buffer.chapter.id)));
+      await Promise.all([saveActiveNote(), ...buffers.map((buffer) => saveChapterBuffer(buffer.chapter.id))]);
     }
     await saveQueueRef.current;
-  }, [captureEditorView, currentDraftInput, project, saveChapterBuffer]);
+    await noteSaveQueueRef.current;
+  }, [captureEditorView, currentDraftInput, project, saveActiveNote, saveChapterBuffer]);
 
   useEffect(() => window.novelLens.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
 
@@ -1443,6 +1556,7 @@ export function App(): ReactNode {
           </button>;
         })}
       </nav>
+      <OutlineNotes notes={notes} activeChapterId={activeChapterId} activeNote={activeNote} draft={noteDraft} saveState={noteSaveState} showAll={showAllNotes} onShowAll={setShowAllNotes} onCreate={createNote} onOpen={openNote} onDraft={updateNoteDraft} onTogglePin={toggleCurrentChapterPin} onSave={saveActiveNote} onArchive={setActiveNoteArchived} />
       <div className="outline-footer"><code title={project.root}>{project.root}</code><span>Markdown正本</span></div>
     </div>;
     if (view === "lens") return <LensPanel
@@ -1773,6 +1887,18 @@ function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, on
 
     <footer className="welcome-footer"><div className="welcome-features"><span><AppIcon name="edit" /> 縦書き・横書き</span><span><AppIcon name="checkpoint" /> 自動保存と保存点</span><span><AppIcon name="lens" /> 根拠付きAIレンズ</span></div><small>Novel Lens {appInfo?.version ?? ""} · {appInfo?.platform ?? "desktop"}</small></footer>
   </main>;
+}
+
+const NOTE_KIND_LABELS: Record<NoteKind, string> = { character: "人物", place: "場所", world: "世界観", plot: "プロット", memo: "メモ" };
+
+function OutlineNotes({ notes, activeChapterId, activeNote, draft, saveState, showAll, onShowAll, onCreate, onOpen, onDraft, onTogglePin, onSave, onArchive }: { notes: NoteMeta[]; activeChapterId: string | null; activeNote: NoteDocument | null; draft: NoteDraft | null; saveState: SaveState; showAll: boolean; onShowAll: (value: boolean) => void; onCreate: () => void; onOpen: (id: string) => void; onDraft: (patch: Partial<Omit<NoteDraft, "id">>) => void; onTogglePin: () => void; onSave: () => Promise<void>; onArchive: (archived: boolean) => void }): ReactNode {
+  const visible = notes.filter((note) => showAll || note.id === activeNote?.note.id || (!note.archived && activeChapterId !== null && note.chapterIds.includes(activeChapterId)));
+  return <details className="outline-notes">
+    <summary><span>作業メモ</span><small>{activeChapterId === null ? notes.filter((note) => !note.archived).length : notes.filter((note) => !note.archived && note.chapterIds.includes(activeChapterId)).length}件</small></summary>
+    <div className="note-toolbar"><button className="text-button" onClick={onCreate}>＋ メモ</button><button className="text-button" onClick={() => onShowAll(!showAll)}>{showAll ? "現在章だけ" : "すべて表示"}</button></div>
+    <div className="note-list">{visible.length === 0 ? <p className="empty">現在章にピン留めされたメモはありません。</p> : visible.map((note) => <button key={note.id} className={activeNote?.note.id === note.id ? "active" : ""} onClick={() => onOpen(note.id)}><span>{note.title}</span><small>{NOTE_KIND_LABELS[note.kind]}{note.archived ? "・保管済み" : note.chapterIds.includes(activeChapterId ?? "") ? "・現在章" : ""}</small></button>)}</div>
+    {activeNote !== null && draft !== null && <div className={`note-editor ${activeNote.note.archived ? "archived" : ""}`}><div className="note-editor-head"><span>{saveState === "saved" ? "保存済み" : saveState === "saving" ? "保存中…" : saveState === "dirty" ? "未保存" : "保存エラー"}</span>{activeNote.note.archived && <b>保管済み</b>}</div><input aria-label="メモのタイトル" maxLength={200} disabled={activeNote.note.archived} value={draft.title} onChange={(event) => onDraft({ title: event.target.value })} /><div className="note-meta-row"><select aria-label="メモの分類" disabled={activeNote.note.archived} value={draft.kind} onChange={(event) => onDraft({ kind: event.target.value as NoteKind })}>{Object.entries(NOTE_KIND_LABELS).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select><label><input type="checkbox" disabled={activeNote.note.archived || activeChapterId === null} checked={activeChapterId !== null && draft.chapterIds.includes(activeChapterId)} onChange={onTogglePin} /> 現在章へピン</label></div><textarea aria-label="メモ本文" rows={7} spellCheck={false} disabled={activeNote.note.archived} value={draft.text} onChange={(event) => onDraft({ text: event.target.value })} placeholder="Markdownで自由に書けます。" /><div className="note-actions"><button className="text-button" disabled={activeNote.note.archived || saveState === "saved" || saveState === "saving"} onClick={() => { void onSave().catch(() => undefined); }}>保存</button><button className="text-button" onClick={() => onArchive(!activeNote.note.archived)}>{activeNote.note.archived ? "保管から戻す" : "保管する"}</button></div></div>}
+  </details>;
 }
 
 interface LensPanelProps {
