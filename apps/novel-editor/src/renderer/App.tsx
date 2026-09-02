@@ -55,8 +55,8 @@ import type {
 import { defaultChapterTitle, defaultSceneTitle } from "../shared/chapter-title.js";
 import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
-import { EditorFindBar } from "./EditorFindBar.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
+import { EditorPane } from "./EditorPane.js";
 import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, Welcome, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
 
 type QuickAccessMode = "commands" | "chapters";
@@ -88,8 +88,6 @@ const VIEW_LABELS: Record<ViewId, string> = {
   search: "作品内検索",
   history: "履歴"
 };
-const MANUSCRIPT_THEME_LABELS: Record<ManuscriptTheme, string> = { paper: "白い紙", sepia: "生成り", gray: "グレー", dark: "黒", custom: "カスタム" };
-
 function applyDropTarget(layout: LayoutPreferences, view: ViewId, target: DropTarget): LayoutPreferences {
   if (target.kind === "reject") return layout;
   if (target.kind === "slot-tab") {
@@ -1892,76 +1890,8 @@ export function App(): ReactNode {
     const groupActive = group.id === editorSession.activeGroupId;
     const groupIndex = manifestChapters.findIndex((item) => item.id === groupChapterId);
     const groupStats = groupChapterId === null ? undefined : editorStats[groupChapterId];
-    return <main
-      key={group.id}
-      className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"} ${groupActive && findOpen ? "find-open" : ""} ${groupActive ? "active-group" : ""}`}
-      style={{ "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}
-      onPointerDown={() => activateEditorGroup(group.id)}
-    >
-      <div className={`editor-tabs ${editorTabDrag !== null ? "dragging" : ""}`} role="tablist" aria-label={`開いている章 ${group.id}`} onDragOver={(event) => { if (event.target !== event.currentTarget || editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId: group.id, index: group.tabs.length }); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); dropEditorTab(group.id, group.tabs.length); }}>
-        {group.tabs.map((tabState, tabIndex) => {
-          const item = manifestChapters.find((candidate) => candidate.id === tabState.chapterId);
-          if (item === undefined) return null;
-          const active = item.id === groupChapterId;
-          const tabBuffer = editorBuffers.buffers[item.id];
-          const dropIndex = editorTabDrop?.groupId === group.id ? editorTabDrop.index : -1;
-          const dropClass = dropIndex === tabIndex ? "drop-before" : dropIndex === tabIndex + 1 ? "drop-after" : "";
-          return <div className={`editor-tab ${active ? "active" : ""} ${editorTabDrag?.groupId === group.id && editorTabDrag.chapterId === item.id ? "drag-source" : ""} ${dropClass}`} key={item.id} role="presentation" draggable onDragStart={(event) => beginEditorTabDrag(group.id, item.id, event)} onDragEnd={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onDragOver={(event) => { if (editorTabDrag === null) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId: group.id, index: editorTabDropIndex(event, tabIndex) }); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(group.id, editorTabDropIndex(event, tabIndex)); }}>
-            <button role="tab" aria-selected={active} onClick={() => void loadChapter(item.id, undefined, group.id)} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; const delta = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0; const target = tabIndex + delta; if (delta === 0 || target < 0 || target >= group.tabs.length) return; event.preventDefault(); setEditorSession((current) => moveEditorTab(current, group.id, item.id, group.id, target)); }} title={`${item.title}（ドラッグ、または Alt+Shift+←/→ で移動）`}><span>{item.title}</span>{tabBuffer !== undefined && tabBuffer.saveState !== "saved" ? <i aria-label="未保存">●</i> : null}</button>
-            <button className="editor-tab-close" aria-label={`${item.title}を閉じる`} title="閉じる" onClick={(event) => { event.stopPropagation(); void closeChapterTab(item.id, group.id); }}><AppIcon name="close" /></button>
-          </div>;
-        })}
-      </div>
-      {groupActive && findOpen && <EditorFindBar
-        replaceVisible={replaceVisible}
-        query={findQuery}
-        replacement={replacement}
-        caseSensitive={caseSensitive}
-        matchCount={findMatches.length}
-        currentMatch={Math.max(0, Math.min(findMatchIndex, findMatches.length - 1))}
-        onQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }}
-        onReplacement={setReplacement}
-        onToggleReplace={() => setReplaceVisible((visible) => !visible)}
-        onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }}
-        onPrevious={() => moveFindMatch(-1)}
-        onNext={() => moveFindMatch(1)}
-        onReplace={replaceCurrentMatch}
-        onReplaceAll={replaceEveryMatch}
-        onClose={closeEditorFind}
-      />}
-      <div className="editor-toolbar">
-        <div><span className="eyebrow">{writingMode === "vertical-rl" ? "VERTICAL WRITING" : "WRITING"}</span><h1>{buffer?.chapter.title ?? "章を選択"}</h1></div>
-        {groupActive && <div className="editor-actions"><button className="icon-button" onClick={() => splitActiveEditor("right")} title="右に分割" aria-label="エディターを右に分割"><AppIcon name="layout" /></button><button className="icon-button split-down-button" onClick={() => splitActiveEditor("down")} title="下に分割" aria-label="エディターを下に分割">↧</button>{editorSession.groups.length > 1 && <button className="icon-button" onClick={() => void closeActiveEditorGroup()} title="このグループを閉じる" aria-label="現在のエディターグループを閉じる"><AppIcon name="close" /></button>}<details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={groupIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void splitCurrentChapter(); }}>カーソル位置で場面分割</button><button disabled={groupIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void mergeCurrentChapterIntoPrevious(); }}>前の章・場面へ結合</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章・場面を削除</button></div></details></div>}
-      </div>
-      <div className="editor-scroll">
-        <textarea
-          ref={(node) => { if (node === null) delete editorRefs.current[group.id]; else editorRefs.current[group.id] = node; if (groupActive) editorRef.current = node; }}
-          aria-label={`${buffer?.chapter.title ?? "小説"}の本文`}
-          className="manuscript-editor"
-          value={buffer?.text ?? ""}
-          spellCheck={false}
-          onFocus={() => activateEditorGroup(group.id)}
-          onBeforeInput={(event) => { const input = event.nativeEvent as InputEvent; if (groupChapterId !== null) captureEditorInput(group.id, groupChapterId, event.currentTarget, input.isComposing, input.inputType); }}
-          onCompositionStart={(event) => { if (groupChapterId !== null) beginEditorComposition(group.id, groupChapterId, event.currentTarget); }}
-          onCompositionEnd={(event) => { if (groupChapterId !== null) finishEditorComposition(group.id, groupChapterId, event.currentTarget); }}
-          onChange={(event) => { if (groupChapterId !== null) changeEditorText(group.id, groupChapterId, event.currentTarget, groupActive); }}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing || compositionRef.current !== null || (!event.metaKey && !event.ctrlKey) || event.altKey) return;
-            const key = event.key.toLowerCase();
-            if (key === "z") { event.preventDefault(); stepEditorHistory(event.shiftKey ? "redo" : "undo"); }
-            else if (key === "y" && !event.shiftKey) { event.preventDefault(); stepEditorHistory("redo"); }
-          }}
-          onSelect={(event) => { if (groupChapterId !== null) recordEditorView(group.id, groupChapterId, event.currentTarget); }}
-          onScroll={(event) => { if (groupChapterId !== null) recordEditorView(group.id, groupChapterId, event.currentTarget); }}
-          onBlur={(event) => { if (groupChapterId === null) return; if (pendingInputRef.current?.groupId === group.id) pendingInputRef.current = null; recordEditorView(group.id, groupChapterId, event.currentTarget); void saveChapterBuffer(groupChapterId); }}
-          disabled={buffer === undefined}
-          placeholder="ここから物語を書き始めます。"
-        />
-      </div>
-      <footer className="statusbar"><span>{groupStats?.charactersNoWhitespace.toLocaleString() ?? "—"}字</span><span>{groupStats?.lines.toLocaleString() ?? "—"}行</span><span>{groupStats?.words.toLocaleString() ?? "—"}語</span><select aria-label="原稿の配色" value={theme} onChange={(event) => void updateProjectSettings({ theme: event.target.value as ManuscriptTheme })}>{Object.entries(MANUSCRIPT_THEME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button onClick={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} title="横書きと縦書きを切り替える">{writingMode === "vertical-rl" ? "縦書き" : "横書き"}</button></footer>
-    </main>;
+    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
   };
-
   return <div className={shellClass} style={shellStyle}><div className={`app ${layout.zenMode ? "zen-mode" : ""}`}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><AppIcon name="logo" size={22} /></span><div><b>Novel Lens</b><button className="project-title" onClick={renameProject} title="作品名を変更">{project.manifest.title}</button></div></div>
