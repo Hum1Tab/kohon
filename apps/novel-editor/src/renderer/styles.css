@@ -333,6 +333,16 @@ body.is-resizing * { cursor: inherit !important; }
 .quote { width: 100%; margin-top: 7px; padding: 8px; color: var(--nl-text); background: var(--nl-accent-soft); border: 1px solid transparent; border-radius: 5px; text-align: left; font-family: "Yu Mincho", serif; font-size: 11px; }
 .quote:hover { border-color: var(--nl-accent); }
 .quote small { display: block; margin-top: 4px; color: var(--nl-accent); font-family: sans-serif; }
+.review-ledger { margin: 14px 0; border: 1px solid var(--nl-line); border-radius: 7px; overflow: hidden; }
+.review-ledger > summary { display: flex; justify-content: space-between; gap: 8px; padding: 10px 11px; background: var(--nl-surface-subtle); cursor: pointer; }
+.review-ledger > summary small { color: var(--nl-muted); }
+.review-ledger-list { padding: 0 9px 9px; }
+.review-entry { padding: 11px 2px; border-bottom: 1px solid var(--nl-line); }
+.review-entry:last-child { border-bottom: 0; }
+.review-entry.resolved, .review-entry.ignored { opacity: .7; }
+.review-entry h3 { margin: 7px 0 4px; font-size: 12px; }
+.review-entry p { margin: 5px 0; color: var(--nl-muted); font-size: 10px; white-space: pre-wrap; }
+.review-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 7px; }
 .scope-preview { padding: 8px 10px; color: var(--nl-muted); background: var(--nl-surface-subtle); border-radius: 6px; font-size: 10px; }
 .scope-preview ul { margin: 6px 0; padding-left: 18px; }
 .scope-preview p { margin: 5px 0; }

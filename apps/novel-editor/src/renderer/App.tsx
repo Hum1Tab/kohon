@@ -35,10 +35,13 @@ import type {
   LensMessage,
   LensProviderId,
   LensRunResult,
+  LensScopeMode,
   ProjectSettings,
   ProjectDiff,
   ProjectSummary,
   RecoveryDraftResult,
+  ReviewLedgerEntry,
+  ReviewStatus,
   RoleId,
   SearchHit,
   UpdateStatus
@@ -50,7 +53,6 @@ import { EditorFindBar } from "./EditorFindBar.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
-type ScopeMode = "current" | "through-current" | "all";
 type QuickAccessMode = "commands" | "chapters";
 
 type DropTarget =
@@ -157,10 +159,11 @@ export function App(): ReactNode {
   const [provider, setProvider] = useState<LensProviderId>("mock");
   const [modelId, setModelId] = useState("gpt-5.6-luna");
   const [lensQuery, setLensQuery] = useState(DEFAULT_QUERY);
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("through-current");
+  const [scopeMode, setScopeMode] = useState<LensScopeMode>("through-current");
   const [scopeApproved, setScopeApproved] = useState(false);
   const [threads, setThreads] = useState<Record<RoleId, LensMessage[]>>(EMPTY_THREADS);
   const [lensResult, setLensResult] = useState<LensRunResult | null>(null);
+  const [reviewFindings, setReviewFindings] = useState<ReviewLedgerEntry[]>([]);
   const [lensBusy, setLensBusy] = useState(false);
   const [textPrompt, setTextPrompt] = useState<TextPromptRequest | null>(null);
   const [quickAccessMode, setQuickAccessMode] = useState<QuickAccessMode | null>(null);
@@ -558,16 +561,21 @@ export function App(): ReactNode {
   const adoptProject = useCallback(async (next: ProjectSummary | null): Promise<void> => {
     if (next === null) return;
     const restoredSession = await window.novelLens.readEditorSession(next.root);
+    let restoredReviews: ReviewLedgerEntry[] = [];
+    let reviewWarning: string | null = null;
+    try { restoredReviews = await window.novelLens.listReviewFindings(next.root); }
+    catch (cause) { reviewWarning = `指摘台帳を読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
     sessionHydratedRootRef.current = next.root;
     setProject(next);
     setEditorSession(restoredSession);
     setEditorBuffers(createEditorBuffers());
     setThreads(EMPTY_THREADS());
     setLensResult(null);
+    setReviewFindings(restoredReviews);
     setSearchHits([]);
     setCheckpoints([]);
     setHistoryDiff(null);
-    setError(null);
+    setError(reviewWarning);
     setNotice(`「${next.manifest.title}」を開きました。`);
     const first = [...next.manifest.chapters].sort((a, b) => a.order - b.order)[0];
     if (first === undefined) {
@@ -1126,22 +1134,50 @@ export function App(): ReactNode {
     setLensBusy(true); setError(null); setNotice(null);
     try {
       await saveAllBuffers();
-      const inputs = await Promise.all(scopeChapters.map(async (item) => ({ id: item.id, title: item.title, order: item.order, text: (await window.novelLens.readChapter(project.root, item.id)).text })));
       const userMessage: LensMessage = { sender: "author", text: query, createdAt: new Date().toISOString() };
       const conversation = [...threads[role], userMessage];
-      const result = await window.novelLens.runLens({ role, query, chapters: inputs, provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
+      const result = await window.novelLens.runLens({ root: project.root, role, query, scope: scopeMode, cutoffChapterId: scopeMode === "all" ? null : activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
       setLensResult(result);
+      if (result.ledgerStored === false) setError(`AIの回答は表示できますが、指摘台帳へ保存できませんでした。${result.ledgerMessage ?? ""}`);
+      else {
+        try { setReviewFindings(await window.novelLens.listReviewFindings(project.root)); }
+        catch (cause) { setError(`AIの回答は表示できますが、指摘台帳を読み込めませんでした。${errorText(cause)}`); }
+      }
       const responseText = [result.summary, ...result.findings.map((finding) => `・${finding.title}: ${finding.observation}`)].join("\n");
       setThreads((current) => ({ ...current, [role]: [...conversation, { sender: "lens", text: responseText, createdAt: new Date().toISOString() }] }));
       setLensQuery("");
     } catch (cause) { setError(errorText(cause)); }
     finally { setLensBusy(false); }
-  }, [lensQuery, modelId, project, provider, role, saveAllBuffers, scopeApproved, scopeChapters, threads]);
+  }, [activeChapterId, lensQuery, modelId, project, provider, role, saveAllBuffers, scopeApproved, scopeChapters, scopeMode, threads]);
 
   const jumpToFinding = useCallback(async (finding: LensFinding): Promise<void> => {
     if (finding.chapterId === null || finding.startUtf16 === null || finding.endUtf16 === null || finding.anchorStatus !== "attached") return;
     await loadChapter(finding.chapterId, { start: finding.startUtf16, end: finding.endUtf16 });
   }, [loadChapter]);
+
+  const jumpToReviewFinding = useCallback(async (finding: ReviewLedgerEntry): Promise<void> => {
+    if (finding.anchorStatus !== "attached" || finding.anchor.offset === null) return;
+    await loadChapter(finding.chapterId, { start: finding.anchor.offset, end: finding.anchor.offset + finding.exactQuote.length });
+  }, [loadChapter]);
+
+  useEffect(() => {
+    if (project === null || saveState !== "saved") return;
+    const lensSlot = slotOf(userSettings.layout, "lens");
+    if (lensSlot === null || userSettings.layout.zenMode || !userSettings.layout.slots[lensSlot].visible || userSettings.layout.slots[lensSlot].activeView !== "lens") return;
+    void window.novelLens.listReviewFindings(project.root).then(setReviewFindings).catch((cause) => setError(errorText(cause)));
+  }, [activeBuffer?.version, project, saveState, userSettings.layout]);
+
+  const updateReviewStatus = useCallback(async (id: string, status: ReviewStatus): Promise<void> => {
+    if (project === null) return;
+    try { setReviewFindings(await window.novelLens.setReviewFindingStatus(project.root, id, status)); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [project]);
+
+  const recheckReview = useCallback(async (id: string): Promise<void> => {
+    if (project === null) return;
+    try { setReviewFindings(await window.novelLens.recheckReviewFinding(project.root, id)); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [project]);
 
   const openQuickAccess = useCallback((mode: QuickAccessMode): void => {
     if (isComposing) return;
@@ -1331,6 +1367,7 @@ export function App(): ReactNode {
       query={lensQuery} setQuery={setLensQuery} scopeMode={scopeMode} setScopeMode={setScopeMode} scopeTitles={scopeChapters.map((item) => item.title)}
       approved={scopeApproved} setApproved={setScopeApproved} thread={threads[role]} result={lensResult?.role === role ? lensResult : null}
       running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
+      reviews={reviewFindings} onReview={jumpToReviewFinding} onReviewStatus={updateReviewStatus} onReviewRecheck={recheckReview}
     />;
     if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
     return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onVariation={createVariation} />;
@@ -1634,13 +1671,15 @@ function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, on
 interface LensPanelProps {
   role: RoleId; setRole: (role: RoleId) => void; provider: LensProviderId; setProvider: (provider: LensProviderId) => void;
   modelId: string; setModelId: (value: string) => void; codexModels: CodexModelOption[]; codexConnected: boolean; openAIConnected: boolean; onOpenSettings: () => void;
-  query: string; setQuery: (value: string) => void; scopeMode: ScopeMode; setScopeMode: (value: ScopeMode) => void;
+  query: string; setQuery: (value: string) => void; scopeMode: LensScopeMode; setScopeMode: (value: LensScopeMode) => void;
   scopeTitles: string[]; approved: boolean; setApproved: (value: boolean) => void; thread: LensMessage[]; result: LensRunResult | null;
   running: boolean; onRun: () => void; onClear: () => void; onFinding: (finding: LensFinding) => void;
+  reviews: ReviewLedgerEntry[]; onReview: (finding: ReviewLedgerEntry) => void; onReviewStatus: (id: string, status: ReviewStatus) => void; onReviewRecheck: (id: string) => void;
 }
 
 function LensPanel(props: LensPanelProps): ReactNode {
   const definition = getRole(props.role);
+  const visibleReviews = props.reviews.slice(0, 200);
   return <div className="inspector-content lens-panel">
     <div className="section-head"><div><span className="eyebrow">SYNTHETIC READER</span><h2>編集レンズ</h2></div>{props.thread.length > 0 && <button className="text-button" onClick={props.onClear}>会話を消す</button>}</div>
     <div className="role-grid">{ROLE_IDS.map((id) => <button key={id} className={props.role === id ? "role active" : "role"} title={getRole(id).description} onClick={() => props.setRole(id)}>{getRole(id).label}</button>)}</div>
@@ -1654,8 +1693,10 @@ function LensPanel(props: LensPanelProps): ReactNode {
       <button className="quote" disabled={finding.anchorStatus !== "attached"} onClick={() => props.onFinding(finding)}>「{finding.quote}」<small>{finding.chapterTitle ?? "原文へ接続できません"}</small></button>
     </article>)}</div>}
 
+    <details className="review-ledger" open={props.reviews.some((finding) => finding.status === "open")}><summary><span>指摘台帳</span><small>未対応 {props.reviews.filter((finding) => finding.status === "open").length}件</small></summary><div className="review-ledger-list">{props.reviews.length === 0 ? <p className="empty">保存された指摘はまだありません。</p> : visibleReviews.map((finding) => <article className={`review-entry ${finding.status}`} key={finding.id}><div className="finding-meta"><span>{finding.role in ROLE_REGISTRY ? getRole(finding.role as RoleId).label : finding.role}</span><span>{finding.status === "open" ? "未対応" : finding.status === "resolved" ? "解決" : "見送り"}</span><span>{finding.anchorStatus === "attached" ? "根拠確認済み" : finding.anchorStatus === "stale" ? "本文変更あり" : "要再確認"}</span></div><h3>{finding.finding?.title ?? "無題の指摘"}</h3><p>{finding.finding?.body}</p><button className="quote" disabled={finding.anchorStatus !== "attached"} onClick={() => props.onReview(finding)}>「{finding.exactQuote}」<small>{finding.title}</small></button><div className="review-actions">{finding.anchorStatus !== "attached" && <button className="text-button" onClick={() => props.onReviewRecheck(finding.id)}>現在の本文で再確認</button>}{finding.status !== "open" && <button className="text-button" onClick={() => props.onReviewStatus(finding.id, "open")}>未対応へ戻す</button>}{finding.status !== "resolved" && <button className="text-button" onClick={() => props.onReviewStatus(finding.id, "resolved")}>解決</button>}{finding.status !== "ignored" && <button className="text-button" onClick={() => props.onReviewStatus(finding.id, "ignored")}>見送る</button>}</div></article>)}{props.reviews.length > visibleReviews.length && <p className="muted">最新{visibleReviews.length}件を表示しています。</p>}</div></details>
+
     <label>質問<textarea rows={4} value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder={DEFAULT_QUERY} /></label>
-    <div className="form-row"><label>接続<select value={props.provider} onChange={(event) => props.setProvider(event.target.value as LensProviderId)}><option value="codex">ChatGPT（Codex枠）</option><option value="mock">Offline Mock</option><option value="openai">OpenAI API</option></select></label><label>範囲<select value={props.scopeMode} onChange={(event) => props.setScopeMode(event.target.value as ScopeMode)}><option value="current">現在の章だけ</option><option value="through-current">現在の章まで</option><option value="all">全章</option></select></label></div>
+    <div className="form-row"><label>接続<select value={props.provider} onChange={(event) => props.setProvider(event.target.value as LensProviderId)}><option value="codex">ChatGPT（Codex枠）</option><option value="mock">Offline Mock</option><option value="openai">OpenAI API</option></select></label><label>範囲<select value={props.scopeMode} onChange={(event) => props.setScopeMode(event.target.value as LensScopeMode)}><option value="current">現在の章だけ</option><option value="through-current">現在の章まで</option><option value="all">全章</option></select></label></div>
     {props.provider === "codex" && <div className="lens-connection"><label>モデル<select value={props.modelId} onChange={(event) => props.setModelId(event.target.value)}>{props.codexModels.length === 0 && <option value={props.modelId}>{props.modelId}</option>}{props.codexModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}{model.id === "gpt-5.6-luna" ? "（節約）" : ""}</option>)}</select></label><div className="lens-connection-state"><span className={props.codexConnected ? "connected" : "disconnected"}>{props.codexConnected ? "ChatGPT接続済み" : "ChatGPT未接続"}</span><button className="text-button" onClick={props.onOpenSettings}>接続設定を開く</button></div></div>}
     {props.provider === "openai" && <div className="lens-connection"><label>Model ID<input value={props.modelId} onChange={(event) => props.setModelId(event.target.value)} /></label><div className="lens-connection-state"><span className={props.openAIConnected ? "connected" : "disconnected"}>{props.openAIConnected ? "OpenAI接続済み" : "OpenAI未接続"}</span><button className="text-button" onClick={props.onOpenSettings}>接続設定を開く</button></div></div>}
     <details className="scope-preview" open><summary>送信範囲: {props.scopeTitles.length}章</summary><ul>{props.scopeTitles.map((title) => <li key={title}>{title}</li>)}</ul><p>未選択章、設定画面、履歴、ファイルパスは送信しません。</p></details>

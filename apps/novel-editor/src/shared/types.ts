@@ -1,9 +1,9 @@
 import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings } from "@novel-lens/project-store";
+import type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
-export type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, RoleId };
+export type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 export type { EditorSessionState } from "./editor-session.js";
 
@@ -80,12 +80,18 @@ export interface LensChapterInput {
   title: string;
   order: number;
   text: string;
+  version: string;
 }
 
+export type LensScopeMode = "current" | "through-current" | "all";
+
 export interface LensRunInput {
+  root: string;
   role: RoleId;
   query: string;
-  chapters: LensChapterInput[];
+  scope: LensScopeMode;
+  cutoffChapterId: string | null;
+  approvedChapterIds: string[];
   provider: LensProviderId;
   modelId: string;
   conversation: LensMessage[];
@@ -112,6 +118,8 @@ export interface LensRunResult {
   coverage: { chapterCount: number; characterCount: number; chapterTitles: string[] };
   provider: LensProviderId;
   modelId: string;
+  ledgerStored?: boolean;
+  ledgerMessage?: string;
 }
 
 export interface AppInfo {
@@ -206,6 +214,9 @@ export interface NovelLensApi {
   createVariation(root: string): Promise<string | null>;
   exportMarkdown(root: string): Promise<string | null>;
   runLens(input: LensRunInput): Promise<LensRunResult>;
+  listReviewFindings(root: string): Promise<ReviewLedgerEntry[]>;
+  setReviewFindingStatus(root: string, id: string, status: ReviewStatus): Promise<ReviewLedgerEntry[]>;
+  recheckReviewFinding(root: string, id: string): Promise<ReviewLedgerEntry[]>;
   connectionStatus(): Promise<ConnectionStatus>;
   loginCodex(): Promise<ConnectionStatus>;
   logoutCodex(): Promise<ConnectionStatus>;

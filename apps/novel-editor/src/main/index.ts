@@ -3,11 +3,12 @@ import { chmod, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/pr
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-import { ProjectStore, type ProjectSettings } from "@novel-lens/project-store";
+import { ProjectStore, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";
 import { sanitizeEditorSession } from "../shared/editor-session.js";
+import { resolveLensScope } from "../shared/lens-scope.js";
 import { COMMAND_DEFINITIONS, defaultUserSettings, toElectronAccelerator, type AppCommandId, type UserSettings } from "../shared/settings.js";
 import { runLens, type LensExecutionInput } from "./lens.js";
 import type { ChapterDocument, LensRunInput, ProjectSummary, RecoveryDraft, RecoveryDraftInput } from "../shared/types.js";
@@ -360,10 +361,36 @@ function registerIpc(): void {
   });
   handle("lens:run", async (input) => {
     if (typeof input !== "object" || input === null) throw new Error("AI requestを確認してください。");
-    const request = { ...(input as LensRunInput) } as LensExecutionInput;
-    delete (request as LensExecutionInput).apiKey;
+    const source = input as LensRunInput;
+    if (typeof source.root !== "string" || !Array.isArray(source.approvedChapterIds) || source.approvedChapterIds.some((id) => typeof id !== "string")) throw new Error("AIへ渡す章を確認してください。");
+    const store = await storeFor(source.root);
+    const manifest = await store.manifest();
+    const expected = resolveLensScope(manifest.chapters, source.scope, source.cutoffChapterId, source.approvedChapterIds);
+    const chapters = await Promise.all(expected.map(async (chapter) => ({ ...chapter, ...(await store.readChapterWithVersion(chapter.id)) })));
+    const request: LensExecutionInput = { role: source.role, query: source.query, scope: source.scope, cutoffChapterId: source.cutoffChapterId, chapters, provider: source.provider, modelId: source.modelId, conversation: source.conversation };
     if (request.provider === "openai") request.apiKey = connections.requireOpenAIKey();
-    return runLens(request, (modelId, prompt, outputSchema) => connections.runCodex(modelId, prompt, outputSchema));
+    const result = await runLens(request, (modelId, prompt, outputSchema) => connections.runCodex(modelId, prompt, outputSchema));
+    const sources = new Map(request.chapters.map((chapter) => [chapter.id, chapter]));
+    try {
+      await store.appendReviewFindings(result.findings.flatMap((finding) => {
+        if (finding.chapterId === null || finding.quote.length === 0) return [];
+        const source = sources.get(finding.chapterId);
+        if (source === undefined) return [];
+        return [{ role: result.role, provider: result.provider, model: result.modelId, scope: request.scope, ...(request.cutoffChapterId === null ? {} : { cutoffChapter: request.cutoffChapterId }), sourceVersionHash: source.version, sourceText: source.text, chapterId: source.id, findingTitle: finding.title, findingBody: `${finding.observation}\n\n読者への影響: ${finding.readerEffect}`, severity: finding.priority, exactQuote: finding.quote }];
+      }));
+      return { ...result, ledgerStored: true };
+    } catch (error) {
+      return { ...result, ledgerStored: false, ledgerMessage: safeMessage(error) };
+    }
+  });
+  handle("reviews:list", async (root) => (await storeFor(root)).listReviewFindings());
+  handle("reviews:set-status", async (root, id, status) => {
+    if (typeof id !== "string" || id.length > 100 || (status !== "open" && status !== "resolved" && status !== "ignored")) throw new Error("指摘の状態を確認してください。");
+    return (await storeFor(root)).setReviewFindingStatus(id, status as ReviewStatus);
+  });
+  handle("reviews:recheck", async (root, id) => {
+    if (typeof id !== "string" || id.length > 100) throw new Error("指摘を確認してください。");
+    return (await storeFor(root)).recheckReviewFinding(id);
   });
   handle("connections:status", () => connections.refreshStatus());
   handle("connections:codex-login", () => connections.loginCodex(async (target) => {
