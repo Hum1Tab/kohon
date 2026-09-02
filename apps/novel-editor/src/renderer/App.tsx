@@ -1100,6 +1100,20 @@ export function App(): ReactNode {
     } catch (cause) { setError(errorText(cause)); }
   }, [activeChapterId, displayChapter, loadCheckpoints, project, saveAllBuffers]);
 
+  const restoreCheckpointChapter = useCallback(async (commit: string, chapterId: string, title: string): Promise<void> => {
+    if (project === null || !window.confirm(`「${title}」だけを選択した保存点へ戻します。他の章は変更しません。復元前の全体状態も自動で残します。`)) return;
+    try {
+      await saveAllBuffers();
+      const restored = await window.novelLens.restoreCheckpointChapter(project.root, commit, chapterId);
+      setProject(restored);
+      await reloadOpenBuffers(restored.root, editorSession);
+      setReviewFindings(await window.novelLens.listReviewFindings(restored.root));
+      setCheckpoints(await window.novelLens.listCheckpoints(restored.root));
+      setHistoryDiff(await window.novelLens.compareCurrentToCheckpoint(restored.root, commit));
+      setNotice(`「${title}」だけを保存点から復元しました。`);
+    } catch (cause) { setError(errorText(cause)); }
+  }, [editorSession, project, reloadOpenBuffers, saveAllBuffers]);
+
   const createVariation = useCallback(async (): Promise<void> => {
     if (project === null) return;
     try { await saveAllBuffers(); const path = await window.novelLens.createVariation(project.root); if (path !== null) setNotice(`別案を作成しました: ${path}`); }
@@ -1672,7 +1686,7 @@ export function App(): ReactNode {
       reviews={reviewFindings} onReview={jumpToReviewFinding} onReviewStatus={updateReviewStatus} onReviewRecheck={recheckReview}
     />;
     if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
-    return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onVariation={createVariation} />;
+    return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onRestoreChapter={restoreCheckpointChapter} onVariation={createVariation} />;
   };
 
   const renderSlot = (slotId: SlotId): ReactNode => {

@@ -217,6 +217,7 @@ export interface NovelLensApi {
   compareCurrentToCheckpoint(root: string, commit: string): Promise<ProjectDiff>;
   compareCheckpoints(root: string, leftCommit: string, rightCommit: string): Promise<ProjectDiff>;
   restoreCheckpoint(root: string, commit: string): Promise<ProjectSummary>;
+  restoreCheckpointChapter(root: string, commit: string, chapterId: string): Promise<ProjectSummary>;
   createVariation(root: string): Promise<string | null>;
   exportMarkdown(root: string): Promise<string | null>;
   exportText(root: string): Promise<string | null>;

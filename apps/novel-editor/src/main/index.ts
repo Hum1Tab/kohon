@@ -354,6 +354,12 @@ function registerIpc(): void {
     await store.restore(commit);
     return summary(store);
   });
+  handle("history:restore-chapter", async (root, commit, chapterId) => {
+    if (typeof commit !== "string" || typeof chapterId !== "string") throw new Error("保存点の章を確認できません。");
+    const store = await storeFor(root);
+    await store.restoreChapter(commit, chapterId);
+    return summary(store);
+  });
   handle("project:variation", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showSaveDialog(mainWindow!, {

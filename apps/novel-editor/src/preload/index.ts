@@ -37,6 +37,7 @@ const api: NovelLensApi = {
   compareCurrentToCheckpoint: (root, commit) => invoke("history:compare-current", root, commit),
   compareCheckpoints: (root, leftCommit, rightCommit) => invoke("history:compare-checkpoints", root, leftCommit, rightCommit),
   restoreCheckpoint: (root, commit) => invoke("history:restore", root, commit),
+  restoreCheckpointChapter: (root, commit, chapterId) => invoke("history:restore-chapter", root, commit, chapterId),
   createVariation: (root) => invoke("project:variation", root),
   exportMarkdown: (root) => invoke("project:export", root),
   exportText: (root) => invoke("project:export-text", root),

@@ -102,6 +102,23 @@ export class ProjectStore {
     for (const [file, text] of Object.entries(snapshot.files)) await atomic(assertPath(this.root, file), text);
     await saveManifest(this.root, snapshot.manifest);
   }
+  async restoreChapter(commit: string, chapterId: string): Promise<Chapter> {
+    const snapshot = await readSnapshot(this.root, commit);
+    const source = snapshot.manifest.chapters.find(chapter => chapter.id === chapterId);
+    if (source === undefined) throw new Error("chapter not found in checkpoint");
+    await this.checkpoint(`Safety checkpoint before restoring ${source.title}`);
+    const current = await load(this.root);
+    const existingIndex = current.chapters.findIndex(chapter => chapter.id === chapterId);
+    const order = existingIndex >= 0 ? current.chapters[existingIndex]!.order : Math.min(source.order, current.chapters.length);
+    const restored: Chapter = { ...source, order };
+    await atomic(assertPath(this.root, restored.file), snapshot.files[source.file]!);
+    if (existingIndex >= 0) current.chapters[existingIndex] = restored;
+    else current.chapters.splice(order, 0, restored);
+    current.chapters.forEach((chapter, index) => chapter.order = index);
+    await saveManifest(this.root, current);
+    await this.clearRecoveryDraft(chapterId);
+    return { ...restored, order: current.chapters.findIndex(chapter => chapter.id === restored.id) };
+  }
   async createVariation(dir: string): Promise<void> { await cp(this.root, dir, { recursive: true, force: false, errorOnExist: true, filter: s => !s.includes(`${resolve(this.root)}\\${INTERNAL}`) && !s.endsWith(`${resolve(this.root)}/${INTERNAL}`) }); }
   async exportMarkdown(): Promise<string> { const m = await load(this.root); const parts: string[] = []; for (const c of [...m.chapters].sort((a,b) => a.order-b.order)) parts.push(`# ${c.title}\n\n${await this.readChapter(c.id)}`); return parts.join("\n\n---\n\n") + "\n"; }
   async exportText(): Promise<string> { const m = await load(this.root); const parts: string[] = []; for (const c of [...m.chapters].sort((a,b) => a.order-b.order)) parts.push(`${c.title}\n\n${(await this.readChapter(c.id)).replace(/[\r\n]+$/u, "")}`); return `${parts.join("\n\n\n")}\n`; }
