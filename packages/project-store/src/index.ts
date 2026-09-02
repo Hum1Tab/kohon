@@ -1,6 +1,9 @@
 import { cp, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
+import { diffTextLines, type DiffHunk } from "./diff.js";
+
+export type { DiffHunk, DiffLine, DiffLineKind, TextDiff } from "./diff.js";
 
 export interface HistoryEntry { commit: string; authoredAt: string; subject: string }
 
@@ -8,6 +11,9 @@ export interface Chapter { id: string; title: string; file: string; order: numbe
 export interface ProjectSettings { writingMode?: "horizontal" | "vertical-rl"; font?: string; width?: number; lineHeight?: number; [key: string]: unknown }
 export interface ProjectManifest { schemaVersion: 1; title: string; chapters: Chapter[]; settings: ProjectSettings }
 export interface SearchResult { chapterId: string; title: string; file: string; start: number; end: number; excerpt: string }
+export type ChapterDiffStatus = "added" | "removed" | "changed" | "same";
+export interface ChapterDiff { chapterId: string; title: string; status: ChapterDiffStatus; leftVersion: string | null; rightVersion: string | null; additions: number; removals: number; hunks: DiffHunk[]; truncated: boolean }
+export interface ProjectDiff { left: string; right: string; chapters: ChapterDiff[]; summary: { added: number; removed: number; changed: number; same: number; additions: number; removals: number; truncated: boolean } }
 const MANIFEST = "novel-lens.json"; const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`; const RECOVERY = `${INTERNAL}/recovery`; const SESSION = `${INTERNAL}/session.json`;
 const safeId = (v: string) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}$/.test(v);
 function assertPath(root: string, p: string): string { const r = resolve(root, p); if (r !== resolve(root) && !r.startsWith(resolve(root) + "/") && !r.startsWith(resolve(root) + "\\")) throw new Error("managed path boundary violation"); return r; }
@@ -19,6 +25,11 @@ function literalMatches(text: string, query: string, caseSensitive: boolean): { 
 function replaceLiteral(text: string, matches: readonly { start: number; end: number }[], replacement: string): string { let cursor = 0; const parts: string[] = []; for (const match of matches) { parts.push(text.slice(cursor, match.start), replacement); cursor = match.end; } parts.push(text.slice(cursor)); return parts.join(""); }
 async function load(root: string): Promise<ProjectManifest> { const m = JSON.parse(await readFile(assertPath(root, MANIFEST), "utf8")) as ProjectManifest; validate(m); return m; }
 async function saveManifest(root: string, m: ProjectManifest): Promise<void> { validate(m); await atomic(assertPath(root, MANIFEST), JSON.stringify(m, null, 2) + "\n"); }
+interface SnapshotData { manifest: ProjectManifest; files: Record<string, string> }
+function validateSnapshot(value: unknown): SnapshotData { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid checkpoint"); const source = value as Record<string, unknown>; const manifest = source["manifest"] as ProjectManifest; validate(manifest); if (typeof source["files"] !== "object" || source["files"] === null || Array.isArray(source["files"])) throw new Error("invalid checkpoint"); const files = source["files"] as Record<string, unknown>; const checked: Record<string, string> = {}; for (const chapter of manifest.chapters) { const text = files[chapter.file]; if (typeof text !== "string") throw new Error("invalid checkpoint"); checked[chapter.file] = text; } return { manifest, files: checked }; }
+async function readSnapshot(root: string, commit: string): Promise<SnapshotData> { if (!/^[0-9-]+-[a-z0-9]+$/i.test(commit)) throw new Error("invalid snapshot id"); return validateSnapshot(JSON.parse(await readFile(assertPath(root, `${HISTORY}/${commit}.json`), "utf8")) as unknown); }
+async function currentSnapshot(root: string): Promise<SnapshotData> { const manifest = await load(root); const files: Record<string, string> = {}; for (const chapter of manifest.chapters) files[chapter.file] = await readFile(assertPath(root, chapter.file), "utf8"); return { manifest, files }; }
+function compareSnapshotData(leftLabel: string, left: SnapshotData, rightLabel: string, right: SnapshotData): ProjectDiff { const leftById = new Map(left.manifest.chapters.map(chapter => [chapter.id, chapter])); const rightById = new Map(right.manifest.chapters.map(chapter => [chapter.id, chapter])); const orderedIds = [...right.manifest.chapters, ...left.manifest.chapters].sort((a, b) => a.order - b.order).map(chapter => chapter.id).filter((id, index, all) => all.indexOf(id) === index); let remainingLines = 4_000; const chapters: ChapterDiff[] = orderedIds.map(chapterId => { const leftChapter = leftById.get(chapterId); const rightChapter = rightById.get(chapterId); const leftText = leftChapter === undefined ? null : left.files[leftChapter.file]!; const rightText = rightChapter === undefined ? null : right.files[rightChapter.file]!; const status: ChapterDiffStatus = leftText === null ? "added" : rightText === null ? "removed" : leftText === rightText ? "same" : "changed"; const textDiff = status === "same" ? { hunks: [], additions: 0, removals: 0, truncated: false } : diffTextLines(leftText ?? "", rightText ?? "", 3, remainingLines); remainingLines = Math.max(0, remainingLines - textDiff.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0)); return { chapterId, title: rightChapter?.title ?? leftChapter?.title ?? chapterId, status, leftVersion: leftText === null ? null : versionOf(leftText), rightVersion: rightText === null ? null : versionOf(rightText), ...textDiff }; }); const summary = { added: chapters.filter(chapter => chapter.status === "added").length, removed: chapters.filter(chapter => chapter.status === "removed").length, changed: chapters.filter(chapter => chapter.status === "changed").length, same: chapters.filter(chapter => chapter.status === "same").length, additions: chapters.reduce((sum, chapter) => sum + chapter.additions, 0), removals: chapters.reduce((sum, chapter) => sum + chapter.removals, 0), truncated: chapters.some(chapter => chapter.truncated) }; return { left: leftLabel, right: rightLabel, chapters, summary }; }
 
 export class ProjectStore {
   constructor(public readonly root: string) {}
@@ -53,10 +64,11 @@ export class ProjectStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("invalid history limit");
     try { const names = (await readdir(assertPath(this.root, HISTORY))).filter(n => n.endsWith(".json")).sort().reverse().slice(0, limit); return await Promise.all(names.map(async n => { const x = JSON.parse(await readFile(assertPath(this.root, `${HISTORY}/${n}`), "utf8")) as { id: string; authoredAt: string; subject: string }; return { commit: x.id, authoredAt: x.authoredAt, subject: x.subject }; })); } catch { return []; }
   }
+  async compareCurrentToCheckpoint(commit: string): Promise<ProjectDiff> { return compareSnapshotData(commit, await readSnapshot(this.root, commit), "current", await currentSnapshot(this.root)); }
+  async compareCheckpoints(leftCommit: string, rightCommit: string): Promise<ProjectDiff> { return compareSnapshotData(leftCommit, await readSnapshot(this.root, leftCommit), rightCommit, await readSnapshot(this.root, rightCommit)); }
   async restore(commit: string): Promise<void> {
-    if (!/^[0-9-]+-[a-z0-9]+$/i.test(commit)) throw new Error("invalid snapshot id");
-    const snapshot = JSON.parse(await readFile(assertPath(this.root, `${HISTORY}/${commit}.json`), "utf8")) as { manifest: ProjectManifest; files: Record<string, string> };
-    validate(snapshot.manifest); await this.checkpoint(`Safety checkpoint before restore ${commit}`);
+    const snapshot = await readSnapshot(this.root, commit);
+    await this.checkpoint(`Safety checkpoint before restore ${commit}`);
     const current = await load(this.root); const wanted = new Set(Object.keys(snapshot.files));
     for (const c of current.chapters) if (!wanted.has(c.file)) await rm(assertPath(this.root, c.file), { force: true });
     for (const [file, text] of Object.entries(snapshot.files)) await atomic(assertPath(this.root, file), text);

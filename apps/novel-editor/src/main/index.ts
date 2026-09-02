@@ -320,6 +320,14 @@ function registerIpc(): void {
     const store = await storeFor(root);
     return store.history(100);
   });
+  handle("history:compare-current", async (root, commit) => {
+    if (typeof commit !== "string") throw new Error("保存点を確認できません。");
+    return (await storeFor(root)).compareCurrentToCheckpoint(commit);
+  });
+  handle("history:compare-checkpoints", async (root, leftCommit, rightCommit) => {
+    if (typeof leftCommit !== "string" || typeof rightCommit !== "string") throw new Error("保存点を確認できません。");
+    return (await storeFor(root)).compareCheckpoints(leftCommit, rightCommit);
+  });
   handle("history:restore", async (root, commit) => {
     if (typeof commit !== "string") throw new Error("保存点を確認できません。");
     const store = await storeFor(root);

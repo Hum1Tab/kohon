@@ -1,9 +1,9 @@
 import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ProjectManifest, ProjectSettings } from "@novel-lens/project-store";
+import type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
-export type { Chapter, ProjectManifest, ProjectSettings, RoleId };
+export type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 export type { EditorSessionState } from "./editor-session.js";
 
@@ -200,6 +200,8 @@ export interface NovelLensApi {
   replaceProjectText(root: string, query: string, replacement: string, caseSensitive: boolean): Promise<ProjectReplaceResult>;
   createCheckpoint(root: string, subject: string): Promise<{ created: boolean; commit: string | null }>;
   listCheckpoints(root: string): Promise<CheckpointEntry[]>;
+  compareCurrentToCheckpoint(root: string, commit: string): Promise<ProjectDiff>;
+  compareCheckpoints(root: string, leftCommit: string, rightCommit: string): Promise<ProjectDiff>;
   restoreCheckpoint(root: string, commit: string): Promise<ProjectSummary>;
   createVariation(root: string): Promise<string | null>;
   exportMarkdown(root: string): Promise<string | null>;

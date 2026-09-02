@@ -36,6 +36,7 @@ import type {
   LensProviderId,
   LensRunResult,
   ProjectSettings,
+  ProjectDiff,
   ProjectSummary,
   RecoveryDraftResult,
   RoleId,
@@ -151,6 +152,7 @@ export function App(): ReactNode {
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [searchRun, setSearchRun] = useState<{ query: string; caseSensitive: boolean } | null>(null);
   const [checkpoints, setCheckpoints] = useState<CheckpointEntry[]>([]);
+  const [historyDiff, setHistoryDiff] = useState<ProjectDiff | null>(null);
   const [role, setRole] = useState<RoleId>("first-reader");
   const [provider, setProvider] = useState<LensProviderId>("mock");
   const [modelId, setModelId] = useState("gpt-5.6-luna");
@@ -564,6 +566,7 @@ export function App(): ReactNode {
     setLensResult(null);
     setSearchHits([]);
     setCheckpoints([]);
+    setHistoryDiff(null);
     setError(null);
     setNotice(`「${next.manifest.title}」を開きました。`);
     const first = [...next.manifest.chapters].sort((a, b) => a.order - b.order)[0];
@@ -808,6 +811,18 @@ export function App(): ReactNode {
     try { await saveAllBuffers(); await window.novelLens.createCheckpoint(project.root, subject.trim()); await loadCheckpoints(); setNotice("保存点を作成しました。"); }
     catch (cause) { setError(errorText(cause)); }
   }, [loadCheckpoints, project, requestText, saveAllBuffers]);
+
+  const compareCurrentCheckpoint = useCallback(async (entry: CheckpointEntry): Promise<void> => {
+    if (project === null) return;
+    try { await saveAllBuffers(); setHistoryDiff(await window.novelLens.compareCurrentToCheckpoint(project.root, entry.commit)); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [project, saveAllBuffers]);
+
+  const compareCheckpointPair = useCallback(async (leftCommit: string, rightCommit: string): Promise<void> => {
+    if (project === null || leftCommit === rightCommit) return;
+    try { setHistoryDiff(await window.novelLens.compareCheckpoints(project.root, leftCommit, rightCommit)); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [project]);
 
   const restoreCheckpoint = useCallback(async (entry: CheckpointEntry): Promise<void> => {
     if (project === null || !window.confirm(`保存点「${entry.subject}」へ戻します。現在の状態は復元前の保存点として残します。`)) return;
@@ -1318,7 +1333,7 @@ export function App(): ReactNode {
       running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
     />;
     if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
-    return <HistoryPanel entries={checkpoints} onCreate={createCheckpoint} onRestore={restoreCheckpoint} onVariation={createVariation} />;
+    return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onVariation={createVariation} />;
   };
 
   const renderSlot = (slotId: SlotId): ReactNode => {
@@ -1659,6 +1674,18 @@ function SearchPanel({ query, setQuery, replacement, setReplacement, caseSensiti
   </div>;
 }
 
-function HistoryPanel({ entries, onCreate, onRestore, onVariation }: { entries: CheckpointEntry[]; onCreate: () => void; onRestore: (entry: CheckpointEntry) => void; onVariation: () => void }): ReactNode {
-  return <div className="inspector-content"><span className="eyebrow">RECOVERY</span><h2>保存点と別案</h2><p className="muted">Gitを知らなくても、節目へ戻れます。復元前の状態も自動で残します。</p><div className="history-actions"><button className="primary" onClick={onCreate}>保存点を作る</button><button className="secondary" onClick={onVariation}>別案を複製</button></div><div className="history-list">{entries.length === 0 ? <p className="empty">保存点はまだありません。</p> : entries.map((entry) => <article key={entry.commit}><div><b>{entry.subject}</b><small>{formatDate(entry.authoredAt)}</small></div><button className="text-button" onClick={() => onRestore(entry)}>ここへ戻る</button></article>)}</div></div>;
+function HistoryPanel({ entries, diff, onCreate, onCompareCurrent, onComparePair, onRestore, onVariation }: { entries: CheckpointEntry[]; diff: ProjectDiff | null; onCreate: () => void; onCompareCurrent: (entry: CheckpointEntry) => void; onComparePair: (leftCommit: string, rightCommit: string) => void; onRestore: (entry: CheckpointEntry) => void; onVariation: () => void }): ReactNode {
+  const [leftCommit, setLeftCommit] = useState("");
+  const [rightCommit, setRightCommit] = useState("");
+  useEffect(() => {
+    if (!entries.some((entry) => entry.commit === rightCommit)) setRightCommit(entries[0]?.commit ?? "");
+    if (!entries.some((entry) => entry.commit === leftCommit)) setLeftCommit(entries[1]?.commit ?? entries[0]?.commit ?? "");
+  }, [entries, leftCommit, rightCommit]);
+  const changed = diff?.chapters.filter((chapterDiff) => chapterDiff.status !== "same") ?? [];
+  return <div className="inspector-content"><span className="eyebrow">RECOVERY</span><h2>保存点と差分</h2><p className="muted">戻す前に変更内容を読めます。復元前の状態も自動で残します。</p>
+    <div className="history-actions"><button className="primary" onClick={onCreate}>保存点を作る</button><button className="secondary" onClick={onVariation}>別案を複製</button></div>
+    {entries.length > 1 && <div className="checkpoint-compare"><label>古い保存点<select value={leftCommit} onChange={(event) => setLeftCommit(event.target.value)}>{entries.map((entry) => <option key={entry.commit} value={entry.commit}>{entry.subject}</option>)}</select></label><label>新しい保存点<select value={rightCommit} onChange={(event) => setRightCommit(event.target.value)}>{entries.map((entry) => <option key={entry.commit} value={entry.commit}>{entry.subject}</option>)}</select></label><button className="secondary" disabled={leftCommit === rightCommit} onClick={() => onComparePair(leftCommit, rightCommit)}>保存点どうしを比較</button></div>}
+    {diff !== null && <section className="checkpoint-diff" aria-label="保存点の差分"><header><b>{diff.summary.changed + diff.summary.added + diff.summary.removed}章に変更</b><span>+{diff.summary.additions} / −{diff.summary.removals}</span></header>{changed.length === 0 ? <p className="empty">本文の変更はありません。</p> : changed.map((chapterDiff) => <details key={chapterDiff.chapterId}><summary><span>{chapterDiff.title}</span><small>{chapterDiff.status === "added" ? "追加" : chapterDiff.status === "removed" ? "削除" : `+${chapterDiff.additions} −${chapterDiff.removals}`}</small></summary><div className="diff-hunks">{chapterDiff.hunks.flatMap((hunk, hunkIndex) => hunk.lines.map((line, lineIndex) => <div className={`diff-line ${line.kind}`} key={`${hunkIndex}-${lineIndex}`}><span>{line.leftLine ?? ""}</span><span>{line.rightLine ?? ""}</span><code>{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "} {line.text || " "}</code></div>))}{chapterDiff.truncated && <p className="muted">差分が大きいため表示を省略しました。</p>}</div></details>)}</section>}
+    <div className="history-list">{entries.length === 0 ? <p className="empty">保存点はまだありません。</p> : entries.map((entry) => <article key={entry.commit}><div><b>{entry.subject}</b><small>{formatDate(entry.authoredAt)}</small></div><div><button className="text-button" onClick={() => onCompareCurrent(entry)}>現在と比較</button><button className="text-button" onClick={() => onRestore(entry)}>ここへ戻る</button></div></article>)}</div>
+  </div>;
 }

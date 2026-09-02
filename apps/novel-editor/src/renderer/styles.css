@@ -355,9 +355,27 @@ body.is-resizing * { cursor: inherit !important; }
 .history-actions, .settings-actions { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0; }
 .history-list article { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--nl-line); }
 .history-list article div { min-width: 0; }
+.history-list article > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .history-list b, .history-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-list b { font-size: 11px; }
 .history-list small { color: var(--nl-muted); font-size: 9px; }
+.checkpoint-compare { display: grid; gap: 9px; margin: 14px 0; padding: 11px; background: var(--nl-surface-subtle); border: 1px solid var(--nl-line); border-radius: 7px; }
+.checkpoint-compare label { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--nl-muted); font-size: 10px; }
+.checkpoint-compare select { min-width: 0; width: 100%; }
+.checkpoint-diff { margin: 14px 0; border: 1px solid var(--nl-line); border-radius: 7px; overflow: hidden; }
+.checkpoint-diff > header { padding: 10px 12px; background: var(--nl-surface-subtle); border-bottom: 1px solid var(--nl-line); }
+.checkpoint-diff > header b, .checkpoint-diff > header small { display: block; }
+.checkpoint-diff > header small { margin-top: 3px; color: var(--nl-muted); font-size: 9px; }
+.checkpoint-diff details { border-bottom: 1px solid var(--nl-line); }
+.checkpoint-diff details:last-child { border-bottom: 0; }
+.checkpoint-diff summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; cursor: pointer; }
+.checkpoint-diff summary small { color: var(--nl-muted); }
+.diff-hunks { padding: 0 8px 9px; overflow-x: auto; }
+.diff-line { display: grid; grid-template-columns: 24px minmax(max-content, 1fr); min-width: max-content; font: 10px/1.55 var(--nl-font-mono); }
+.diff-line > span { color: var(--nl-muted); text-align: center; user-select: none; }
+.diff-line code { padding: 0 6px; color: var(--nl-text); white-space: pre; }
+.diff-line.add { background: color-mix(in srgb, var(--nl-success) 12%, transparent); }
+.diff-line.remove { background: color-mix(in srgb, var(--nl-danger) 11%, transparent); }
 .shortcut-card { margin-top: 20px; padding: 12px; background: var(--nl-surface-subtle); border-radius: 7px; }
 .shortcut-card dl { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin: 9px 0 0; font-size: 10px; }
 .shortcut-card dd { margin: 0; color: var(--nl-muted); }
