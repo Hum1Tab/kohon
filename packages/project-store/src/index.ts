@@ -23,7 +23,9 @@ export interface ChapterDiff { chapterId: string; title: string; status: Chapter
 export interface ProjectDiff { left: string; right: string; chapters: ChapterDiff[]; summary: { added: number; removed: number; changed: number; same: number; additions: number; removals: number; truncated: boolean } }
 export interface AppendReviewFindingInput { role: string; provider?: string; model?: string; scope: ReviewScope; cutoffChapter?: string; checkpoint?: string; sourceVersionHash: string; sourceText: string; chapterId: string; findingTitle: string; findingBody: string; severity?: string; exactQuote: string }
 export interface NoteDocument { note: NoteMeta; text: string }
-const MANIFEST = "novel-lens.json"; const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`; const RECOVERY = `${INTERNAL}/recovery`; const SESSION = `${INTERNAL}/session.json`; const REVIEWS = `${INTERNAL}/reviews/ledger.json`;
+export const PROJECT_MANIFEST = "kohon.json";
+export const LEGACY_PROJECT_MANIFEST = "novel-lens.json";
+const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`; const RECOVERY = `${INTERNAL}/recovery`; const SESSION = `${INTERNAL}/session.json`; const REVIEWS = `${INTERNAL}/reviews/ledger.json`;
 const safeId = (v: string) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}$/.test(v);
 function assertPath(root: string, p: string): string { const r = resolve(root, p); if (r !== resolve(root) && !r.startsWith(resolve(root) + "/") && !r.startsWith(resolve(root) + "\\")) throw new Error("managed path boundary violation"); return r; }
 function validChapterMetadata(value: unknown): boolean { if (value === undefined) return true; validateChapterMetadata(value); return true; }
@@ -33,8 +35,14 @@ function versionOf(text: string): string { return createHash("sha256").update(te
 async function readJsonIfPresent(path: string): Promise<unknown | null> { try { return JSON.parse(await readFile(path, "utf8")) as unknown; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } }
 function literalMatches(text: string, query: string, caseSensitive: boolean): { start: number; end: number }[] { if (query.length === 0) return []; const escaped = query.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"); const pattern = new RegExp(escaped, caseSensitive ? "gu" : "giu"); return [...text.matchAll(pattern)].map(match => ({ start: match.index, end: match.index + match[0].length })); }
 function replaceLiteral(text: string, matches: readonly { start: number; end: number }[], replacement: string): string { let cursor = 0; const parts: string[] = []; for (const match of matches) { parts.push(text.slice(cursor, match.start), replacement); cursor = match.end; } parts.push(text.slice(cursor)); return parts.join(""); }
-async function load(root: string): Promise<ProjectManifest> { const m = JSON.parse(await readFile(assertPath(root, MANIFEST), "utf8")) as ProjectManifest; validate(m); return m; }
-async function saveManifest(root: string, m: ProjectManifest): Promise<void> { validate(m); await atomic(assertPath(root, MANIFEST), JSON.stringify(m, null, 2) + "\n"); }
+async function manifestPath(root: string): Promise<string> {
+  const current = await readJsonIfPresent(assertPath(root, PROJECT_MANIFEST));
+  if (current !== null) return PROJECT_MANIFEST;
+  const legacy = await readJsonIfPresent(assertPath(root, LEGACY_PROJECT_MANIFEST));
+  return legacy === null ? PROJECT_MANIFEST : LEGACY_PROJECT_MANIFEST;
+}
+async function load(root: string): Promise<ProjectManifest> { const name = await manifestPath(root); const m = JSON.parse(await readFile(assertPath(root, name), "utf8")) as ProjectManifest; validate(m); return m; }
+async function saveManifest(root: string, m: ProjectManifest): Promise<void> { validate(m); await atomic(assertPath(root, await manifestPath(root)), JSON.stringify(m, null, 2) + "\n"); }
 interface SnapshotData { manifest: ProjectManifest; files: Record<string, string> }
 function validateSnapshot(value: unknown): SnapshotData { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid checkpoint"); const source = value as Record<string, unknown>; const manifest = source["manifest"] as ProjectManifest; validate(manifest); if (typeof source["files"] !== "object" || source["files"] === null || Array.isArray(source["files"])) throw new Error("invalid checkpoint"); const files = source["files"] as Record<string, unknown>; const checked: Record<string, string> = {}; for (const chapter of manifest.chapters) { const text = files[chapter.file]; if (typeof text !== "string") throw new Error("invalid checkpoint"); checked[chapter.file] = text; } return { manifest, files: checked }; }
 async function readSnapshot(root: string, commit: string): Promise<SnapshotData> { if (!/^[0-9-]+-[a-z0-9]+$/i.test(commit)) throw new Error("invalid snapshot id"); return validateSnapshot(JSON.parse(await readFile(assertPath(root, `${HISTORY}/${commit}.json`), "utf8")) as unknown); }

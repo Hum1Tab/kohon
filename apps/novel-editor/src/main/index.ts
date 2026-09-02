@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/pr
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-import { ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
+import { LEGACY_PROJECT_MANIFEST, PROJECT_MANIFEST, ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";
@@ -30,7 +30,6 @@ let userSettings = defaultUserSettings();
 let keybindingRecording = false;
 let updateManager: UpdateManager | null = null;
 const connections = new ConnectionManager((status) => mainWindow?.webContents.send("connections:status", status));
-const PROJECT_MANIFEST = "novel-lens.json";
 const EXTERNAL_PAGES = {
   chatgpt: "https://chatgpt.com/",
   "openai-api-keys": "https://platform.openai.com/api-keys",
@@ -150,15 +149,15 @@ async function chooseNewProject(title: unknown): Promise<ProjectSummary | null> 
 
 async function chooseExistingProject(): Promise<ProjectSummary | null> {
   const selected = await dialog.showOpenDialog(mainWindow!, {
-    title: `作品フォルダー内の ${PROJECT_MANIFEST} を選択`,
+    title: `作品フォルダー内の ${PROJECT_MANIFEST} または ${LEGACY_PROJECT_MANIFEST} を選択`,
     defaultPath: app.getPath("documents"),
     buttonLabel: "この作品を開く",
-    filters: [{ name: `Novel Lens作品 (${PROJECT_MANIFEST})`, extensions: ["json"] }],
+    filters: [{ name: `KOHON作品 (${PROJECT_MANIFEST} / ${LEGACY_PROJECT_MANIFEST})`, extensions: ["json"] }],
     properties: ["openFile"]
   });
   const selectedPath = selected.filePaths[0];
   if (selected.canceled || selectedPath === undefined) return null;
-  if (basename(selectedPath) !== PROJECT_MANIFEST) throw new Error(`作品フォルダー内の ${PROJECT_MANIFEST} を選択してください。`);
+  if (basename(selectedPath) !== PROJECT_MANIFEST && basename(selectedPath) !== LEGACY_PROJECT_MANIFEST) throw new Error(`作品フォルダー内の ${PROJECT_MANIFEST} または ${LEGACY_PROJECT_MANIFEST} を選択してください。`);
   const root = await registerRoot(dirname(selectedPath));
   const store = new ProjectStore(root);
   await store.open();
