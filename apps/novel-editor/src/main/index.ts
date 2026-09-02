@@ -302,9 +302,15 @@ function registerIpc(): void {
     await store.resetSetting(key as "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width");
     return summary(store);
   });
-  handle("project:search", async (root, query) => {
+  handle("project:search", async (root, query, caseSensitive) => {
     if (typeof query !== "string" || query.trim().length === 0 || query.length > 500) return [];
-    return (await (await storeFor(root)).search(query)).map(({ chapterId, title, start, end, excerpt }) => ({ chapterId, title, start, end, excerpt }));
+    return (await (await storeFor(root)).search(query, caseSensitive === true)).map(({ chapterId, title, start, end, excerpt }) => ({ chapterId, title, start, end, excerpt }));
+  });
+  handle("project:replace", async (root, query, replacement, caseSensitive) => {
+    if (typeof query !== "string" || query.trim().length === 0 || query.length > 500 || typeof replacement !== "string" || replacement.length > 10_000 || typeof caseSensitive !== "boolean") throw new Error("置換する文字を確認してください。");
+    const store = await storeFor(root);
+    await store.checkpoint(`作品全体の置換前: ${query.slice(0, 80)}`);
+    return store.replaceAll(query, replacement, caseSensitive);
   });
   handle("history:checkpoint", async (root, subject) => {
     if (typeof subject !== "string" || subject.trim().length === 0 || subject.length > 200) throw new Error("保存点の名前を確認してください。");

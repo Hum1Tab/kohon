@@ -344,6 +344,11 @@ body.is-resizing * { cursor: inherit !important; }
 .search-box { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-top: 12px; }
 .search-box input { margin: 0; }
 .search-box button { color: var(--nl-on-accent); background: var(--nl-accent); border: 0; border-radius: 6px; }
+.search-option { margin: 8px 0 10px; color: var(--nl-muted); font-size: 11px; }
+.workspace-replace { display: grid; gap: 7px; margin: 10px 0 14px; padding: 10px; background: var(--nl-surface-subtle); border: 1px solid var(--nl-line); border-radius: 7px; }
+.workspace-replace label { display: grid; gap: 4px; color: var(--nl-muted); font-size: 11px; }
+.workspace-replace input { width: 100%; margin: 0; }
+.workspace-replace small { color: var(--nl-muted); line-height: 1.5; }
 .search-results button { width: 100%; margin: 5px 0; padding: 10px; color: var(--nl-text); background: var(--nl-surface-raised); border: 1px solid var(--nl-line); border-radius: 6px; text-align: left; }
 .search-results button:hover { border-color: var(--nl-accent); }
 .search-results p { margin: 4px 0 0; color: var(--nl-muted); font-size: 11px; }

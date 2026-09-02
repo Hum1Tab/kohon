@@ -147,6 +147,9 @@ export function App(): ReactNode {
   const [layoutAnnouncement, setLayoutAnnouncement] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
+  const [searchReplacement, setSearchReplacement] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchRun, setSearchRun] = useState<{ query: string; caseSensitive: boolean } | null>(null);
   const [checkpoints, setCheckpoints] = useState<CheckpointEntry[]>([]);
   const [role, setRole] = useState<RoleId>("first-reader");
   const [provider, setProvider] = useState<LensProviderId>("mock");
@@ -516,6 +519,18 @@ export function App(): ReactNode {
     }
   }, [focusRange, restoreEditorView]);
 
+  const reloadOpenBuffers = useCallback(async (root: string, sessionState: EditorSessionState): Promise<void> => {
+    setEditorBuffers(createEditorBuffers());
+    const activeGroup = sessionState.groups.find((group) => group.id === sessionState.activeGroupId) ?? sessionState.groups[0];
+    const loaded = new Set<string>();
+    for (const group of sessionState.groups) {
+      if (group.activeChapterId === null || loaded.has(group.activeChapterId)) continue;
+      loaded.add(group.activeChapterId);
+      const document = await window.novelLens.readChapter(root, group.activeChapterId);
+      await displayChapter(root, document, group.tabs.find((item) => item.chapterId === group.activeChapterId), undefined, group.id === activeGroup?.id);
+    }
+  }, [displayChapter]);
+
   const loadChapter = useCallback(async (chapterId: string, range?: { start: number; end: number }, groupId: EditorGroupId = editorSession.activeGroupId): Promise<void> => {
     if (project === null) return;
     await saveNow();
@@ -557,16 +572,8 @@ export function App(): ReactNode {
       setEditorBuffers(createEditorBuffers());
       return;
     }
-    const activeGroup = restoredSession.groups.find((group) => group.id === restoredSession.activeGroupId) ?? restoredSession.groups[0];
-    const activeId = activeGroup?.activeChapterId ?? first.id;
-    const loaded = await window.novelLens.readChapter(next.root, activeId);
-    await displayChapter(next.root, loaded, activeGroup?.tabs.find((item) => item.chapterId === activeId));
-    for (const group of restoredSession.groups) {
-      if (group.id === activeGroup?.id || group.activeChapterId === null || group.activeChapterId === activeId) continue;
-      const background = await window.novelLens.readChapter(next.root, group.activeChapterId);
-      await displayChapter(next.root, background, group.tabs.find((item) => item.chapterId === group.activeChapterId), undefined, false);
-    }
-  }, [displayChapter]);
+    await reloadOpenBuffers(next.root, restoredSession);
+  }, [reloadOpenBuffers]);
 
   const recordEditorView = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
     setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd, scrollTop: editor.scrollTop, scrollLeft: editor.scrollLeft }));
@@ -761,9 +768,22 @@ export function App(): ReactNode {
 
   const runSearch = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0) { setSearchHits([]); return; }
-    try { await saveAllBuffers(); setSearchHits(await window.novelLens.search(project.root, searchQuery.trim())); }
+    try { const query = searchQuery.trim(); await saveAllBuffers(); setSearchHits(await window.novelLens.search(project.root, query, searchCaseSensitive)); setSearchRun({ query, caseSensitive: searchCaseSensitive }); }
     catch (cause) { setError(errorText(cause)); }
-  }, [project, saveAllBuffers, searchQuery]);
+  }, [project, saveAllBuffers, searchCaseSensitive, searchQuery]);
+
+  const replaceAcrossProject = useCallback(async (): Promise<void> => {
+    if (project === null || searchQuery.trim().length === 0 || searchHits.length === 0 || searchRun?.query !== searchQuery.trim() || searchRun.caseSensitive !== searchCaseSensitive) return;
+    const chapterCount = new Set(searchHits.map((hit) => hit.chapterId)).size;
+    if (!window.confirm(`${chapterCount}章の${searchHits.length}件を置換します。実行前の保存点は自動で作成されます。よろしいですか？`)) return;
+    try {
+      await saveAllBuffers();
+      const result = await window.novelLens.replaceProjectText(project.root, searchQuery.trim(), searchReplacement, searchCaseSensitive);
+      await reloadOpenBuffers(project.root, editorSession);
+      setSearchHits(await window.novelLens.search(project.root, searchQuery.trim(), searchCaseSensitive));
+      setNotice(`${result.chapterCount}章の${result.count}件を置換しました。`);
+    } catch (cause) { setError(errorText(cause)); }
+  }, [editorSession, project, reloadOpenBuffers, saveAllBuffers, searchCaseSensitive, searchHits, searchQuery, searchReplacement, searchRun]);
 
   const loadCheckpoints = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -1297,7 +1317,7 @@ export function App(): ReactNode {
       approved={scopeApproved} setApproved={setScopeApproved} thread={threads[role]} result={lensResult?.role === role ? lensResult : null}
       running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
     />;
-    if (view === "search") return <SearchPanel query={searchQuery} setQuery={setSearchQuery} hits={searchHits} onSearch={runSearch} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
+    if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
     return <HistoryPanel entries={checkpoints} onCreate={createCheckpoint} onRestore={restoreCheckpoint} onVariation={createVariation} />;
   };
 
@@ -1630,8 +1650,13 @@ function LensPanel(props: LensPanelProps): ReactNode {
   </div>;
 }
 
-function SearchPanel({ query, setQuery, hits, onSearch, onHit }: { query: string; setQuery: (value: string) => void; hits: SearchHit[]; onSearch: () => void; onHit: (hit: SearchHit) => void }): ReactNode {
-  return <div className="inspector-content"><span className="eyebrow">FULL TEXT</span><h2>作品内検索</h2><div className="search-box"><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="語句を入力" /><button onClick={onSearch}>検索</button></div><p className="result-count">{hits.length}件</p><div className="search-results">{hits.map((hit, index) => <button key={`${hit.chapterId}-${hit.start}-${index}`} onClick={() => onHit(hit)}><b>{hit.title}</b><p>{hit.excerpt}</p></button>)}</div></div>;
+function SearchPanel({ query, setQuery, replacement, setReplacement, caseSensitive, setCaseSensitive, hits, previewReady, onSearch, onReplace, onHit }: { query: string; setQuery: (value: string) => void; replacement: string; setReplacement: (value: string) => void; caseSensitive: boolean; setCaseSensitive: (value: boolean) => void; hits: SearchHit[]; previewReady: boolean; onSearch: () => void; onReplace: () => void; onHit: (hit: SearchHit) => void }): ReactNode {
+  return <div className="inspector-content"><span className="eyebrow">FULL TEXT</span><h2>作品内検索・置換</h2>
+    <div className="search-box"><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="語句を入力" /><button onClick={onSearch}>検索</button></div>
+    <label className="check search-option"><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} /> 大文字と小文字を区別</label>
+    <div className="workspace-replace"><label>置換後<input value={replacement} onChange={(event) => setReplacement(event.target.value)} placeholder="空欄なら削除" /></label><button className="secondary" disabled={!previewReady || hits.length === 0} onClick={onReplace}>{hits.length === 0 ? "置換する一致なし" : `${hits.length}件を置換…`}</button><small>表示中の一致だけを対象に確認し、実行前に保存点を作ります。</small></div>
+    <p className="result-count">{previewReady ? `${hits.length}件` : "検索して置換範囲を確認"}</p><div className="search-results">{hits.map((hit, index) => <button key={`${hit.chapterId}-${hit.start}-${index}`} onClick={() => onHit(hit)}><b>{hit.title}</b><p>{hit.excerpt}</p></button>)}</div>
+  </div>;
 }
 
 function HistoryPanel({ entries, onCreate, onRestore, onVariation }: { entries: CheckpointEntry[]; onCreate: () => void; onRestore: (entry: CheckpointEntry) => void; onVariation: () => void }): ReactNode {

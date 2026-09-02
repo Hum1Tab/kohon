@@ -56,6 +56,11 @@ export interface SearchHit {
   excerpt: string;
 }
 
+export interface ProjectReplaceResult {
+  count: number;
+  chapterCount: number;
+}
+
 export interface CheckpointEntry {
   commit: string;
   authoredAt: string;
@@ -191,7 +196,8 @@ export interface NovelLensApi {
   deleteChapter(root: string, chapterId: string): Promise<void>;
   updateSettings(root: string, settings: ProjectSettings): Promise<ProjectSummary>;
   resetProjectSetting(root: string, key: "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width"): Promise<ProjectSummary>;
-  search(root: string, query: string): Promise<SearchHit[]>;
+  search(root: string, query: string, caseSensitive?: boolean): Promise<SearchHit[]>;
+  replaceProjectText(root: string, query: string, replacement: string, caseSensitive: boolean): Promise<ProjectReplaceResult>;
   createCheckpoint(root: string, subject: string): Promise<{ created: boolean; commit: string | null }>;
   listCheckpoints(root: string): Promise<CheckpointEntry[]>;
   restoreCheckpoint(root: string, commit: string): Promise<ProjectSummary>;
