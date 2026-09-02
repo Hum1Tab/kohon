@@ -20,6 +20,9 @@ export type AppCommandId =
   | "workbench.quickOpen"
   | "editor.find"
   | "editor.replace"
+  | "editor.splitRight"
+  | "editor.splitDown"
+  | "editor.closeGroup"
   | "history.checkpoint"
   | "file.export"
   | "view.settings"
@@ -53,6 +56,9 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "workbench.quickOpen", label: "章をクイック オープン", category: "表示", defaultBinding: "Mod+P" },
   { id: "editor.find", label: "本文内を検索", category: "編集", defaultBinding: "Mod+F" },
   { id: "editor.replace", label: "本文内を置換", category: "編集", defaultBinding: "Mod+Alt+F" },
+  { id: "editor.splitRight", label: "エディターを右に分割", category: "表示", defaultBinding: "Mod+\\" },
+  { id: "editor.splitDown", label: "エディターを下に分割", category: "表示", defaultBinding: "" },
+  { id: "editor.closeGroup", label: "現在のエディターグループを閉じる", category: "表示", defaultBinding: "" },
   { id: "history.checkpoint", label: "保存点を作る", category: "履歴", defaultBinding: "Mod+Shift+S" },
   { id: "file.export", label: "Markdownを書き出す", category: "ファイル", defaultBinding: "Mod+Alt+E" },
   { id: "view.settings", label: "設定を開く", category: "表示", defaultBinding: "Mod+," },
@@ -202,7 +208,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
     keybindings["view.search"] = "Mod+Shift+F";
     keybindings["editor.find"] = "Mod+F";
   }
-  const newCommands: readonly AppCommandId[] = ["workbench.commandPalette", "workbench.quickOpen", "editor.find", "editor.replace"];
+  const newCommands: readonly AppCommandId[] = ["workbench.commandPalette", "workbench.quickOpen", "editor.find", "editor.replace", "editor.splitRight", "editor.splitDown", "editor.closeGroup"];
   if (storedSchema < 3) {
     for (const id of newCommands) {
       if (rawBindings[id] !== undefined || keybindings[id].length === 0) continue;

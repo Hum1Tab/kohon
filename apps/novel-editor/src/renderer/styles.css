@@ -238,8 +238,17 @@ body.is-resizing * { cursor: inherit !important; }
 .outline-footer code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Only this region reads manuscript tokens. The toolbar and statusbar remain chrome. */
+.editor-groups { min-width: 0; min-height: 0; display: grid; overflow: hidden; background: var(--nl-bg); }
+.editor-groups.split-none { grid-template-columns: minmax(0, 1fr); }
+.editor-groups.split-right { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.editor-groups.split-down { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.editor-groups.split-right > .editor-pane + .editor-pane { border-left: 1px solid var(--nl-line); }
+.editor-groups.split-down > .editor-pane + .editor-pane { border-top: 1px solid var(--nl-line); }
+.editor-pane.active-group { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nl-accent) 28%, transparent); }
 .editor-pane { display: grid; grid-template-rows: auto auto minmax(240px, 1fr) auto; min-width: 0; min-height: 0; background: var(--nl-bg); --ms-bg: var(--nl-paper-bg); --ms-text: var(--nl-paper-text); --ms-line: var(--nl-paper-line); }
 .editor-pane.find-open { grid-template-rows: auto auto auto minmax(240px, 1fr) auto; }
+.editor-groups.split-down .editor-pane { grid-template-rows: auto auto minmax(100px, 1fr) auto; }
+.editor-groups.split-down .editor-pane.find-open { grid-template-rows: auto auto auto minmax(100px, 1fr) auto; }
 .editor-pane.manuscript-paper { --ms-bg: var(--nl-paper-bg); --ms-text: var(--nl-paper-text); --ms-line: var(--nl-paper-line); }
 .editor-pane.manuscript-sepia { --ms-bg: var(--nl-sepia-bg); --ms-text: var(--nl-sepia-text); --ms-line: var(--nl-sepia-line); }
 .editor-pane.manuscript-gray { --ms-bg: #e6e8eb; --ms-text: #202124; --ms-line: #cdd1d6; }
