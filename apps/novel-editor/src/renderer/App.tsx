@@ -924,6 +924,52 @@ export function App(): ReactNode {
     } catch (cause) { setError(errorText(cause)); }
   }, [activeIndex, chapter, displayChapter, manifestChapters.length, project, refreshProject, saveNow]);
 
+  const splitCurrentChapter = useCallback(async (): Promise<void> => {
+    if (project === null || chapter === null) return;
+    const editor = editorRef.current;
+    const offset = editor?.selectionStart ?? 0;
+    if (offset <= 0 || offset >= chapter.text.length) { setError("本文の途中へカーソルを置いてください。"); return; }
+    const sceneNumber = manifestChapters.filter((item) => item.kind === "scene").length + 1;
+    const title = await requestText({ title: "カーソル位置で場面を分割", label: "新しい場面のタイトル", initialValue: defaultSceneTitle(sceneNumber), confirmLabel: "分割する" });
+    if (title === null) return;
+    try {
+      await saveAllBuffers();
+      await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」場面分割前`);
+      const captured = captureEditorView();
+      const result = await window.novelLens.splitChapter(project.root, chapter.chapter.id, offset, title);
+      const nextSession = openEditorTab(captured, result.created.id, captured.activeGroupId);
+      setProject(result.project); setEditorSession(nextSession);
+      await reloadOpenBuffers(project.root, nextSession);
+      setNotes(await window.novelLens.listNotes(project.root));
+      setReviewFindings(await window.novelLens.listReviewFindings(project.root));
+      setCheckpoints(await window.novelLens.listCheckpoints(project.root));
+      setNotice(`「${result.created.title}」へ分割しました。`);
+    } catch (cause) { setError(errorText(cause)); }
+  }, [captureEditorView, chapter, manifestChapters, project, reloadOpenBuffers, requestText, saveAllBuffers]);
+
+  const mergeCurrentChapterIntoPrevious = useCallback(async (): Promise<void> => {
+    if (project === null || chapter === null || activeIndex <= 0) return;
+    const target = manifestChapters[activeIndex - 1]!;
+    if (!window.confirm(`「${chapter.chapter.title}」を前の「${target.title}」へ結合します。実行前の保存点は自動で残します。`)) return;
+    try {
+      await saveAllBuffers();
+      const targetBefore = await window.novelLens.readChapter(project.root, target.id);
+      await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」結合前`);
+      let nextSession = captureEditorView();
+      const sourceGroupId = nextSession.activeGroupId;
+      const result = await window.novelLens.mergeChapterIntoPrevious(project.root, chapter.chapter.id);
+      for (const group of [...nextSession.groups]) nextSession = closeEditorTab(nextSession, group.id, chapter.chapter.id);
+      nextSession = openEditorTab(nextSession, result.target.id, sourceGroupId);
+      setProject(result.project); setEditorSession(nextSession);
+      await reloadOpenBuffers(project.root, nextSession);
+      focusRange(targetBefore.text.length, targetBefore.text.length);
+      setNotes(await window.novelLens.listNotes(project.root));
+      setReviewFindings(await window.novelLens.listReviewFindings(project.root));
+      setCheckpoints(await window.novelLens.listCheckpoints(project.root));
+      setNotice(`「${result.target.title}」へ結合しました。`);
+    } catch (cause) { setError(errorText(cause)); }
+  }, [activeIndex, captureEditorView, chapter, focusRange, manifestChapters, project, reloadOpenBuffers, saveAllBuffers]);
+
   const runSearch = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0) { setSearchHits([]); return; }
     try { const query = searchQuery.trim(); await saveAllBuffers(); setSearchHits(await window.novelLens.search(project.root, query, searchCaseSensitive)); setSearchRun({ query, caseSensitive: searchCaseSensitive }); }
@@ -1398,6 +1444,8 @@ export function App(): ReactNode {
     else if (action === "editor.moveTabLeft") moveActiveEditorTab(-1);
     else if (action === "editor.moveTabRight") moveActiveEditorTab(1);
     else if (action === "editor.moveTabToOtherGroup") moveActiveEditorTabToOtherGroup();
+    else if (action === "editor.splitScene") void splitCurrentChapter();
+    else if (action === "editor.mergePrevious") void mergeCurrentChapterIntoPrevious();
     else if (action === "history.checkpoint") void createCheckpoint();
     else if (action === "file.export") void exportProject();
     else if (action === "file.exportText") void exportText();
@@ -1416,7 +1464,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
+  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;
@@ -1718,7 +1766,7 @@ export function App(): ReactNode {
       />}
       <div className="editor-toolbar">
         <div><span className="eyebrow">{writingMode === "vertical-rl" ? "VERTICAL WRITING" : "WRITING"}</span><h1>{buffer?.chapter.title ?? "章を選択"}</h1></div>
-        {groupActive && <div className="editor-actions"><button className="icon-button" onClick={() => splitActiveEditor("right")} title="右に分割" aria-label="エディターを右に分割"><AppIcon name="layout" /></button><button className="icon-button split-down-button" onClick={() => splitActiveEditor("down")} title="下に分割" aria-label="エディターを下に分割">↧</button>{editorSession.groups.length > 1 && <button className="icon-button" onClick={() => void closeActiveEditorGroup()} title="このグループを閉じる" aria-label="現在のエディターグループを閉じる"><AppIcon name="close" /></button>}<details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={groupIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章を削除</button></div></details></div>}
+        {groupActive && <div className="editor-actions"><button className="icon-button" onClick={() => splitActiveEditor("right")} title="右に分割" aria-label="エディターを右に分割"><AppIcon name="layout" /></button><button className="icon-button split-down-button" onClick={() => splitActiveEditor("down")} title="下に分割" aria-label="エディターを下に分割">↧</button>{editorSession.groups.length > 1 && <button className="icon-button" onClick={() => void closeActiveEditorGroup()} title="このグループを閉じる" aria-label="現在のエディターグループを閉じる"><AppIcon name="close" /></button>}<details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={groupIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void splitCurrentChapter(); }}>カーソル位置で場面分割</button><button disabled={groupIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void mergeCurrentChapterIntoPrevious(); }}>前の章・場面へ結合</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章・場面を削除</button></div></details></div>}
       </div>
       <div className="editor-scroll">
         <textarea

@@ -30,6 +30,8 @@ export type AppCommandId =
   | "editor.moveTabLeft"
   | "editor.moveTabRight"
   | "editor.moveTabToOtherGroup"
+  | "editor.splitScene"
+  | "editor.mergePrevious"
   | "history.checkpoint"
   | "file.export"
   | "file.exportText"
@@ -74,6 +76,8 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "editor.moveTabLeft", label: "章タブを左へ移動", category: "表示", defaultBinding: "" },
   { id: "editor.moveTabRight", label: "章タブを右へ移動", category: "表示", defaultBinding: "" },
   { id: "editor.moveTabToOtherGroup", label: "章タブを別のエディターへ移動", category: "表示", defaultBinding: "" },
+  { id: "editor.splitScene", label: "カーソル位置で場面を分割", category: "編集", defaultBinding: "" },
+  { id: "editor.mergePrevious", label: "前の章・場面へ結合", category: "編集", defaultBinding: "" },
   { id: "history.checkpoint", label: "保存点を作る", category: "履歴", defaultBinding: "Mod+Shift+S" },
   { id: "file.export", label: "Markdownを書き出す", category: "ファイル", defaultBinding: "Mod+Alt+E" },
   { id: "file.exportText", label: "TXTを書き出す", category: "ファイル", defaultBinding: "" },

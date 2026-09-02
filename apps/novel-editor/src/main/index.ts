@@ -236,6 +236,18 @@ function registerIpc(): void {
     if (kind !== undefined && kind !== "chapter" && kind !== "scene") throw new Error("章・場面の種類を確認してください。");
     return (await storeFor(root)).createChapter(title, "", kind ?? "chapter");
   });
+  handle("chapter:split", async (root, chapterId, offset, title) => {
+    if (typeof chapterId !== "string" || !Number.isInteger(offset) || typeof title !== "string" || title.trim().length === 0 || title.length > 200) throw new Error("場面の分割位置を確認してください。");
+    const store = await storeFor(root);
+    const created = await store.splitChapter(chapterId, offset, title);
+    return { project: await summary(store), created };
+  });
+  handle("chapter:merge-previous", async (root, chapterId) => {
+    if (typeof chapterId !== "string") throw new Error("結合する章・場面を確認してください。");
+    const store = await storeFor(root);
+    const target = await store.mergeChapterIntoPrevious(chapterId);
+    return { project: await summary(store), target };
+  });
   handle("chapter:import", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showOpenDialog(mainWindow!, {
@@ -508,7 +520,7 @@ function installMenu(): void {
         { role: process.platform === "darwin" ? "close" : "quit" }
       ]
     },
-    { label: "編集", submenu: [commandMenuItem("editor.find"), commandMenuItem("editor.replace"), { type: "separator" }, { label: "小説向け入力", submenu: [commandMenuItem("editor.ruby"), commandMenuItem("editor.emphasis"), commandMenuItem("editor.normalizePunctuation"), commandMenuItem("editor.indentedParagraph")] }, { type: "separator" }, { role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+    { label: "編集", submenu: [commandMenuItem("editor.find"), commandMenuItem("editor.replace"), { type: "separator" }, { label: "小説向け入力", submenu: [commandMenuItem("editor.ruby"), commandMenuItem("editor.emphasis"), commandMenuItem("editor.normalizePunctuation"), commandMenuItem("editor.indentedParagraph")] }, { label: "構成編集", submenu: [commandMenuItem("editor.splitScene"), commandMenuItem("editor.mergePrevious")] }, { type: "separator" }, { role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
     { label: "設定", submenu: [commandMenuItem("view.settings", "設定を開く…"), { type: "separator" }, commandMenuItem("view.settings.appearance"), commandMenuItem("view.settings.layout"), commandMenuItem("view.settings.editor"), commandMenuItem("view.settings.ai"), commandMenuItem("view.settings.accounts"), commandMenuItem("view.settings.keyboard"), commandMenuItem("view.settings.updates")] },
     { label: "表示", submenu: [commandMenuItem("workbench.commandPalette"), commandMenuItem("workbench.quickOpen"), { type: "separator" }, commandMenuItem("editor.splitRight"), commandMenuItem("editor.splitDown"), commandMenuItem("editor.closeGroup"), { label: "エディター タブ", submenu: [commandMenuItem("editor.moveTabLeft"), commandMenuItem("editor.moveTabRight"), commandMenuItem("editor.moveTabToOtherGroup")] }, { type: "separator" }, commandMenuItem("view.outline"), commandMenuItem("view.lens"), commandMenuItem("view.search"), commandMenuItem("view.history"), { type: "separator" }, commandMenuItem("view.zen"), commandMenuItem("layout.reset"), { type: "separator" }, { role: "togglefullscreen" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
     { label: "ヘルプ", submenu: [commandMenuItem("updates.check"), { label: "GitHub Releasesを開く", click: () => { void openExternalPage("latest-release"); } }] }

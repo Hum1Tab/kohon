@@ -61,6 +61,9 @@ export interface ProjectReplaceResult {
   chapterCount: number;
 }
 
+export interface ChapterSplitResult { project: ProjectSummary; created: Chapter }
+export interface ChapterMergeResult { project: ProjectSummary; target: Chapter }
+
 export interface CheckpointEntry {
   commit: string;
   authoredAt: string;
@@ -197,6 +200,8 @@ export interface NovelLensApi {
   writeRecoveryDraft(root: string, draft: RecoveryDraftInput): Promise<void>;
   clearRecoveryDraft(root: string, chapterId: string): Promise<void>;
   createChapter(root: string, title: string, kind?: ChapterKind): Promise<Chapter>;
+  splitChapter(root: string, chapterId: string, offset: number, title: string): Promise<ChapterSplitResult>;
+  mergeChapterIntoPrevious(root: string, chapterId: string): Promise<ChapterMergeResult>;
   importDocuments(root: string): Promise<ImportedDocumentSummary | null>;
   renameChapter(root: string, chapterId: string, title: string): Promise<void>;
   reorderChapters(root: string, chapterIds: string[]): Promise<ProjectSummary>;
