@@ -2,6 +2,7 @@ import { getRole, ROLE_REGISTRY, textStats } from "@novel-lens/editor-core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
+import { closeEditorTab, defaultEditorSession, openEditorTab, updateEditorTabView, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import {
   defaultLayout,
   defaultUserSettings,
@@ -31,6 +32,7 @@ import type {
   LensRunResult,
   ProjectSettings,
   ProjectSummary,
+  RecoveryDraftResult,
   RoleId,
   SearchHit,
   UpdateStatus
@@ -125,11 +127,13 @@ export function App(): ReactNode {
   const [connections, setConnections] = useState<ConnectionStatus>(DEFAULT_CONNECTIONS);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [project, setProject] = useState<ProjectSummary | null>(null);
+  const [editorSession, setEditorSession] = useState<EditorSessionState>(() => defaultEditorSession());
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [chapter, setChapter] = useState<ChapterDocument | null>(null);
   const [text, setText] = useState("");
   const [savedText, setSavedText] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [recoveryConflict, setRecoveryConflict] = useState<RecoveryDraftResult | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +156,11 @@ export function App(): ReactNode {
   const [lensBusy, setLensBusy] = useState(false);
   const [textPrompt, setTextPrompt] = useState<TextPromptRequest | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const textRef = useRef("");
+  const savedVersionRef = useRef("");
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedSaveRef = useRef<{ root: string; chapterId: string; text: string } | null>(null);
+  const sessionHydratedRootRef = useRef<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuOriginRef = useRef<HTMLElement | null>(null);
@@ -298,29 +307,89 @@ export function App(): ReactNode {
 
   useEffect(() => { setScopeApproved(false); }, [role, scopeMode, activeChapterId, project?.root]);
 
+  useEffect(() => { textRef.current = text; }, [text]);
+
+  useEffect(() => {
+    if (project === null || sessionHydratedRootRef.current !== project.root) return;
+    const timer = window.setTimeout(() => {
+      void window.novelLens.writeEditorSession(project.root, editorSession).catch((cause) => setError(errorText(cause)));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [editorSession, project]);
+
   const clearMessages = useCallback(() => { setError(null); setNotice(null); }, []);
+
+  const captureEditorView = useCallback((sessionState: EditorSessionState = editorSession): EditorSessionState => {
+    if (activeChapterId === null) return sessionState;
+    const editor = editorRef.current;
+    if (editor === null) return sessionState;
+    return updateEditorTabView(sessionState, sessionState.activeGroupId, activeChapterId, {
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      scrollTop: editor.scrollTop,
+      scrollLeft: editor.scrollLeft
+    });
+  }, [activeChapterId, editorSession]);
+
+  const currentDraftInput = useCallback((chapterId: string, value: string, baseVersion: string) => {
+    const editor = editorRef.current;
+    return {
+      chapterId,
+      text: value,
+      baseVersion,
+      selectionStart: editor?.selectionStart ?? 0,
+      selectionEnd: editor?.selectionEnd ?? 0,
+      scrollTop: editor?.scrollTop ?? 0,
+      scrollLeft: editor?.scrollLeft ?? 0
+    };
+  }, []);
 
   const saveNow = useCallback(async (): Promise<void> => {
     if (project === null || activeChapterId === null || text === savedText) return;
+    const snapshot = { root: project.root, chapterId: activeChapterId, text };
+    const queued = queuedSaveRef.current;
+    if (queued !== null && queued.root === snapshot.root && queued.chapterId === snapshot.chapterId && queued.text === snapshot.text) return saveQueueRef.current;
+    queuedSaveRef.current = snapshot;
     setSaveState("saving");
-    try {
-      await window.novelLens.saveChapter(project.root, activeChapterId, text);
-      setSavedText(text);
-      setSaveState("saved");
-    } catch (cause) {
-      setSaveState("error");
-      setError(errorText(cause));
-      throw cause;
-    }
-  }, [activeChapterId, project, savedText, text]);
+    const operation = saveQueueRef.current.catch(() => undefined).then(async () => {
+      try {
+        const result = await window.novelLens.saveChapter(snapshot.root, snapshot.chapterId, snapshot.text);
+        savedVersionRef.current = result.version;
+        setSavedText(snapshot.text);
+        if (textRef.current === snapshot.text) {
+          await window.novelLens.clearRecoveryDraft(snapshot.root, snapshot.chapterId);
+          setSaveState("saved");
+        } else {
+          await window.novelLens.writeRecoveryDraft(snapshot.root, currentDraftInput(snapshot.chapterId, textRef.current, result.version));
+          setSaveState("dirty");
+        }
+      } catch (cause) {
+        setSaveState("error");
+        setError(errorText(cause));
+        throw cause;
+      } finally {
+        if (queuedSaveRef.current === snapshot) queuedSaveRef.current = null;
+      }
+    });
+    saveQueueRef.current = operation;
+    return operation;
+  }, [activeChapterId, currentDraftInput, project, savedText, text]);
 
   useEffect(() => {
     if (text === savedText) { if (saveState !== "saving") setSaveState("saved"); return; }
     setSaveState("dirty");
-    if (isComposing || project === null || activeChapterId === null) return;
+    if (isComposing || project === null || activeChapterId === null || recoveryConflict?.draft.chapterId === activeChapterId) return;
     const timer = window.setTimeout(() => { void saveNow(); }, userSettings.general.autoSaveDelayMs);
     return () => window.clearTimeout(timer);
-  }, [activeChapterId, isComposing, project, saveNow, saveState, savedText, text, userSettings.general.autoSaveDelayMs]);
+  }, [activeChapterId, isComposing, project, recoveryConflict, saveNow, saveState, savedText, text, userSettings.general.autoSaveDelayMs]);
+
+  useEffect(() => {
+    if (project === null || activeChapterId === null || text === savedText || savedVersionRef.current.length === 0 || isComposing || recoveryConflict?.draft.chapterId === activeChapterId) return;
+    const timer = window.setTimeout(() => {
+      void window.novelLens.writeRecoveryDraft(project.root, currentDraftInput(activeChapterId, text, savedVersionRef.current)).catch((cause) => setError(errorText(cause)));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [activeChapterId, currentDraftInput, isComposing, project, recoveryConflict, savedText, text]);
 
   const focusRange = useCallback((start: number, end: number): void => {
     window.setTimeout(() => {
@@ -331,26 +400,60 @@ export function App(): ReactNode {
     }, 60);
   }, []);
 
+  const restoreEditorView = useCallback((view: EditorTabState | undefined): void => {
+    if (view === undefined) return;
+    window.setTimeout(() => {
+      const editor = editorRef.current;
+      if (editor === null) return;
+      const start = Math.min(view.selectionStart, editor.value.length);
+      const end = Math.min(Math.max(start, view.selectionEnd), editor.value.length);
+      editor.setSelectionRange(start, end);
+      editor.scrollTop = view.scrollTop;
+      editor.scrollLeft = view.scrollLeft;
+    }, 60);
+  }, []);
+
+  const displayChapter = useCallback(async (root: string, next: ChapterDocument, view?: EditorTabState, range?: { start: number; end: number }): Promise<void> => {
+    let recovery: RecoveryDraftResult | null = null;
+    try { recovery = await window.novelLens.readRecoveryDraft(root, next.chapter.id); }
+    catch (cause) { setError(errorText(cause)); }
+    const recovered = recovery !== null && !recovery.conflict;
+    const displayedText = recovery !== null && !recovery.conflict ? recovery.draft.text : next.text;
+    savedVersionRef.current = next.version;
+    textRef.current = displayedText;
+    setActiveChapterId(next.chapter.id);
+    setChapter(next);
+    setText(displayedText);
+    setSavedText(next.text);
+    setRecoveryConflict(recovery?.conflict ? recovery : null);
+    setSaveState(recovered ? "dirty" : "saved");
+    if (recovered) setNotice(`「${next.chapter.title}」の未保存内容を復旧しました。`);
+    else if (recovery?.conflict) setNotice(`「${next.chapter.title}」に保存内容と競合する復旧ドラフトがあります。`);
+    if (range !== undefined) focusRange(range.start, range.end);
+    else restoreEditorView(recovered ? recovery?.draft : view);
+  }, [focusRange, restoreEditorView]);
+
   const loadChapter = useCallback(async (chapterId: string, range?: { start: number; end: number }): Promise<void> => {
     if (project === null) return;
     await saveNow();
     clearMessages();
     setBusy(true);
     try {
+      const nextSession = openEditorTab(captureEditorView(), chapterId);
       const next = await window.novelLens.readChapter(project.root, chapterId);
-      setActiveChapterId(chapterId);
-      setChapter(next);
-      setText(next.text);
-      setSavedText(next.text);
-      setSaveState("saved");
-      if (range !== undefined) focusRange(range.start, range.end);
+      setEditorSession(nextSession);
+      const group = nextSession.groups.find((item) => item.id === nextSession.activeGroupId);
+      await displayChapter(project.root, next, group?.tabs.find((item) => item.chapterId === chapterId), range);
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
-  }, [clearMessages, focusRange, project, saveNow]);
+  }, [captureEditorView, clearMessages, displayChapter, project, saveNow]);
 
   const adoptProject = useCallback(async (next: ProjectSummary | null): Promise<void> => {
     if (next === null) return;
+    const restoredSession = await window.novelLens.readEditorSession(next.root);
+    sessionHydratedRootRef.current = next.root;
     setProject(next);
+    setEditorSession(restoredSession);
     setThreads(EMPTY_THREADS());
     setLensResult(null);
     setSearchHits([]);
@@ -359,12 +462,67 @@ export function App(): ReactNode {
     setNotice(`「${next.manifest.title}」を開きました。`);
     const first = [...next.manifest.chapters].sort((a, b) => a.order - b.order)[0];
     if (first === undefined) {
+      savedVersionRef.current = ""; textRef.current = ""; setRecoveryConflict(null);
       setActiveChapterId(null); setChapter(null); setText(""); setSavedText("");
       return;
     }
-    const loaded = await window.novelLens.readChapter(next.root, first.id);
-    setActiveChapterId(first.id); setChapter(loaded); setText(loaded.text); setSavedText(loaded.text); setSaveState("saved");
-  }, []);
+    const activeGroup = restoredSession.groups.find((group) => group.id === restoredSession.activeGroupId) ?? restoredSession.groups[0];
+    const activeId = activeGroup?.activeChapterId ?? first.id;
+    const loaded = await window.novelLens.readChapter(next.root, activeId);
+    await displayChapter(next.root, loaded, activeGroup?.tabs.find((item) => item.chapterId === activeId));
+  }, [displayChapter]);
+
+  const recordEditorView = useCallback((): void => {
+    setEditorSession((current) => captureEditorView(current));
+  }, [captureEditorView]);
+
+  const closeChapterTab = useCallback(async (chapterId: string): Promise<void> => {
+    if (project === null) return;
+    const captured = captureEditorView();
+    const groupId = captured.activeGroupId;
+    const group = captured.groups.find((item) => item.id === groupId);
+    const wasActive = activeChapterId === chapterId;
+    if (wasActive) await saveNow();
+    const nextSession = closeEditorTab(captured, groupId, chapterId);
+    setEditorSession(nextSession);
+    if (!wasActive) return;
+    const nextId = nextSession.groups.find((item) => item.id === groupId)?.activeChapterId ?? null;
+    if (nextId === null) {
+      savedVersionRef.current = "";
+      textRef.current = "";
+      setActiveChapterId(null);
+      setChapter(null);
+      setText("");
+      setSavedText("");
+      setRecoveryConflict(null);
+      setSaveState("saved");
+      return;
+    }
+    const loaded = await window.novelLens.readChapter(project.root, nextId);
+    const nextView = nextSession.groups.find((item) => item.id === groupId)?.tabs.find((item) => item.chapterId === nextId);
+    await displayChapter(project.root, loaded, nextView);
+  }, [activeChapterId, captureEditorView, displayChapter, project, saveNow]);
+
+  const useRecoveryDraft = useCallback((): void => {
+    if (recoveryConflict === null) return;
+    const draft = recoveryConflict.draft;
+    savedVersionRef.current = recoveryConflict.canonicalVersion;
+    textRef.current = draft.text;
+    setText(draft.text);
+    setRecoveryConflict(null);
+    setSaveState("dirty");
+    restoreEditorView(draft);
+    setNotice("復旧ドラフトを本文へ戻しました。自動保存します。");
+  }, [recoveryConflict, restoreEditorView]);
+
+  const discardRecoveryDraft = useCallback(async (): Promise<void> => {
+    if (project === null || recoveryConflict === null) return;
+    try {
+      await window.novelLens.clearRecoveryDraft(project.root, recoveryConflict.draft.chapterId);
+      setRecoveryConflict(null);
+      setNotice("復旧ドラフトを破棄し、現在の保存内容を維持しました。");
+    } catch (cause) { setError(errorText(cause)); }
+  }, [project, recoveryConflict]);
 
   const createProject = useCallback(async (): Promise<void> => {
     const title = await requestText({
@@ -475,9 +633,14 @@ export function App(): ReactNode {
       await window.novelLens.deleteChapter(project.root, chapter.chapter.id);
       const refreshed = await refreshProject();
       const next = refreshed?.manifest.chapters[Math.max(0, Math.min(oldIndex, (refreshed?.manifest.chapters.length ?? 1) - 1))];
-      if (next !== undefined) await loadChapter(next.id);
+      if (next !== undefined) {
+        const restoredSession = openEditorTab(await window.novelLens.readEditorSession(project.root), next.id);
+        setEditorSession(restoredSession);
+        const loaded = await window.novelLens.readChapter(project.root, next.id);
+        await displayChapter(project.root, loaded, restoredSession.groups[0]?.tabs.find((item) => item.chapterId === next.id));
+      }
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeIndex, chapter, loadChapter, manifestChapters.length, project, refreshProject, saveNow]);
+  }, [activeIndex, chapter, displayChapter, manifestChapters.length, project, refreshProject, saveNow]);
 
   const runSearch = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0) { setSearchHits([]); return; }
@@ -517,13 +680,15 @@ export function App(): ReactNode {
       setProject(restored);
       const desired = restored.manifest.chapters.find((item) => item.id === activeChapterId) ?? restored.manifest.chapters[0];
       if (desired !== undefined) {
+        const restoredSession = openEditorTab(await window.novelLens.readEditorSession(restored.root), desired.id);
+        setEditorSession(restoredSession);
         const loaded = await window.novelLens.readChapter(restored.root, desired.id);
-        setActiveChapterId(desired.id); setChapter(loaded); setText(loaded.text); setSavedText(loaded.text); setSaveState("saved");
+        await displayChapter(restored.root, loaded, restoredSession.groups[0]?.tabs.find((item) => item.chapterId === desired.id));
       }
       await loadCheckpoints();
       setNotice("保存点から復元しました。");
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeChapterId, loadCheckpoints, project, saveNow]);
+  }, [activeChapterId, displayChapter, loadCheckpoints, project, saveNow]);
 
   const createVariation = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -842,7 +1007,19 @@ export function App(): ReactNode {
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
   }), [checkUpdates, commitLayout, createCheckpoint, createProject, exportProject, openProject, openSettings, revealView, saveNow, userSettings.layout]);
 
-  useEffect(() => window.novelLens.onBeforeClose(saveNow), [saveNow]);
+  const flushBeforeClose = useCallback(async (): Promise<void> => {
+    if (project !== null) {
+      const captured = captureEditorView();
+      await window.novelLens.writeEditorSession(project.root, captured);
+      if (activeChapterId !== null && text !== savedText && savedVersionRef.current.length > 0) {
+        await window.novelLens.writeRecoveryDraft(project.root, currentDraftInput(activeChapterId, text, savedVersionRef.current));
+      }
+    }
+    await saveNow();
+    await saveQueueRef.current;
+  }, [activeChapterId, captureEditorView, currentDraftInput, project, saveNow, savedText, text]);
+
+  useEffect(() => window.novelLens.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
 
   const layout = userSettings.layout;
   const slotVisible = (slot: SlotId): boolean => !layout.zenMode && layout.slots[slot].visible && layout.slots[slot].views.length > 0;
@@ -1060,6 +1237,11 @@ export function App(): ReactNode {
     </header>
 
     {(error !== null || notice !== null) && <div className={`banner ${error !== null ? "error" : "notice"}`} role="status"><span>{error ?? notice}</span><button aria-label="閉じる" onClick={clearMessages}><AppIcon name="close" /></button></div>}
+    {recoveryConflict !== null && <div className="recovery-banner" role="alert">
+      <div><b>未保存の復旧ドラフトがあります</b><span>保存済み本文が別に更新されているため、自動では上書きしません。</span></div>
+      <button className="secondary" onClick={useRecoveryDraft}>復旧ドラフトを開く</button>
+      <button className="ghost" onClick={() => void discardRecoveryDraft()}>保存済み本文を維持</button>
+    </div>}
 
     <div className="workspace" ref={workspaceRef} style={workspaceStyle}>
       {activityVisible && <aside className={`activity-bar activity-${layout.activityBar}`} style={{ gridColumn: columnFor("activity"), gridRow: "1 / -1" }} aria-label="表示切り替え">
@@ -1086,6 +1268,17 @@ export function App(): ReactNode {
       {renderSlot("secondary")}
 
       <main data-editor-pane className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"}`} style={{ gridColumn: columnFor("editor"), gridRow: 1, "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}>
+        <div className="editor-tabs" role="tablist" aria-label="開いている章">
+          {(editorSession.groups.find((group) => group.id === editorSession.activeGroupId)?.tabs ?? []).map((tabState) => {
+            const item = manifestChapters.find((candidate) => candidate.id === tabState.chapterId);
+            if (item === undefined) return null;
+            const active = item.id === activeChapterId;
+            return <div className={`editor-tab ${active ? "active" : ""}`} key={item.id} role="presentation">
+              <button role="tab" aria-selected={active} onClick={() => void loadChapter(item.id)} title={item.title}><span>{item.title}</span>{active && saveState !== "saved" ? <i aria-label="未保存">●</i> : null}</button>
+              <button className="editor-tab-close" aria-label={`${item.title}を閉じる`} title="閉じる" onClick={() => void closeChapterTab(item.id)}><AppIcon name="close" /></button>
+            </div>;
+          })}
+        </div>
         <div className="editor-toolbar">
           <div><span className="eyebrow">{writingMode === "vertical-rl" ? "VERTICAL WRITING" : "WRITING"}</span><h1>{chapter?.chapter.title ?? "章を選択"}</h1></div>
           <div className="editor-actions"><details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={activeIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={activeIndex < 0 || activeIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章を削除</button></div></details></div>
@@ -1099,8 +1292,11 @@ export function App(): ReactNode {
             spellCheck={false}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
-            onChange={(event) => setText(event.target.value)}
-            onBlur={() => { void saveNow(); }}
+            onChange={(event) => { textRef.current = event.target.value; setText(event.target.value); }}
+            onSelect={recordEditorView}
+            onScroll={recordEditorView}
+            onBlur={() => { recordEditorView(); void saveNow(); }}
+            disabled={chapter === null}
             placeholder="ここから物語を書き始めます。"
           />
         </div>

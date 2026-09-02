@@ -14,6 +14,11 @@ const api: NovelLensApi = {
   refreshProject: (root) => invoke("project:refresh", root),
   readChapter: (root, chapterId) => invoke("chapter:read", root, chapterId),
   saveChapter: (root, chapterId, text) => invoke("chapter:save", root, chapterId, text),
+  readEditorSession: (root) => invoke("editor-session:read", root),
+  writeEditorSession: (root, editorSession) => invoke("editor-session:write", root, editorSession),
+  readRecoveryDraft: (root, chapterId) => invoke("recovery:read", root, chapterId),
+  writeRecoveryDraft: (root, draft) => invoke("recovery:write", root, draft),
+  clearRecoveryDraft: (root, chapterId) => invoke("recovery:clear", root, chapterId),
   createChapter: (root, title) => invoke("chapter:create", root, title),
   importDocuments: (root) => invoke("chapter:import", root),
   renameChapter: (root, chapterId, title) => invoke("chapter:rename", root, chapterId, title),
@@ -56,7 +61,7 @@ const api: NovelLensApi = {
     return () => ipcRenderer.removeListener("updates:status", handler);
   },
   onBeforeClose: (listener) => {
-    const handler = () => { void Promise.resolve(listener()).catch(() => undefined).finally(() => ipcRenderer.send("app:close-ready")); };
+    const handler = () => { void Promise.resolve(listener()).then(() => ipcRenderer.send("app:close-ready"), () => ipcRenderer.send("app:close-cancel")); };
     ipcRenderer.on("app:before-close", handler);
     return () => ipcRenderer.removeListener("app:before-close", handler);
   }

@@ -1,5 +1,5 @@
 import { cp, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 
 export interface HistoryEntry { commit: string; authoredAt: string; subject: string }
@@ -8,11 +8,13 @@ export interface Chapter { id: string; title: string; file: string; order: numbe
 export interface ProjectSettings { writingMode?: "horizontal" | "vertical-rl"; font?: string; width?: number; lineHeight?: number; [key: string]: unknown }
 export interface ProjectManifest { schemaVersion: 1; title: string; chapters: Chapter[]; settings: ProjectSettings }
 export interface SearchResult { chapterId: string; title: string; file: string; start: number; end: number; excerpt: string }
-const MANIFEST = "novel-lens.json"; const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`;
+const MANIFEST = "novel-lens.json"; const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`; const RECOVERY = `${INTERNAL}/recovery`; const SESSION = `${INTERNAL}/session.json`;
 const safeId = (v: string) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}$/.test(v);
 function assertPath(root: string, p: string): string { const r = resolve(root, p); if (r !== resolve(root) && !r.startsWith(resolve(root) + "/") && !r.startsWith(resolve(root) + "\\")) throw new Error("managed path boundary violation"); return r; }
 function validate(m: ProjectManifest): void { if (m.schemaVersion !== 1 || !Array.isArray(m.chapters) || !m.chapters.every(c => safeId(c.id) && c.file === `${MANUSCRIPT}/${c.id}.md` && Number.isInteger(c.order))) throw new Error("invalid project manifest"); }
 async function atomic(path: string, data: string): Promise<void> { const tmp = `${path}.tmp-${process.pid}-${Date.now()}`; const handle = await open(tmp, "w"); try { await handle.writeFile(data, "utf8"); await handle.sync(); } finally { await handle.close(); } await rename(tmp, path); }
+function versionOf(text: string): string { return createHash("sha256").update(text, "utf8").digest("hex"); }
+async function readJsonIfPresent(path: string): Promise<unknown | null> { try { return JSON.parse(await readFile(path, "utf8")) as unknown; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } }
 async function load(root: string): Promise<ProjectManifest> { const m = JSON.parse(await readFile(assertPath(root, MANIFEST), "utf8")) as ProjectManifest; validate(m); return m; }
 async function saveManifest(root: string, m: ProjectManifest): Promise<void> { validate(m); await atomic(assertPath(root, MANIFEST), JSON.stringify(m, null, 2) + "\n"); }
 
@@ -22,12 +24,18 @@ export class ProjectStore {
   async manifest(): Promise<ProjectManifest> { return load(this.root); }
   async open(): Promise<ProjectManifest> { return this.manifest(); }
   async readChapter(id: string): Promise<string> { const m = await load(this.root); const c = m.chapters.find(x => x.id === id); if (!c) throw new Error("chapter not found"); return readFile(assertPath(this.root, c.file), "utf8"); }
-  async saveChapter(id: string, text: string): Promise<void> { const m = await load(this.root); const c = m.chapters.find(x => x.id === id); if (!c) throw new Error("chapter not found"); await atomic(assertPath(this.root, c.file), text); }
+  async readChapterWithVersion(id: string): Promise<{ text: string; version: string }> { const text = await this.readChapter(id); return { text, version: versionOf(text) }; }
+  async saveChapter(id: string, text: string): Promise<string> { const m = await load(this.root); const c = m.chapters.find(x => x.id === id); if (!c) throw new Error("chapter not found"); await atomic(assertPath(this.root, c.file), text); return versionOf(text); }
+  async readEditorSession(): Promise<unknown | null> { await load(this.root); try { return await readJsonIfPresent(assertPath(this.root, SESSION)); } catch (error) { if (error instanceof SyntaxError) return null; throw error; } }
+  async writeEditorSession(session: unknown): Promise<void> { await load(this.root); await mkdir(assertPath(this.root, INTERNAL), { recursive: true }); await atomic(assertPath(this.root, SESSION), JSON.stringify(session, null, 2) + "\n"); }
+  async readRecoveryDraft(id: string): Promise<unknown | null> { const m = await load(this.root); if (!m.chapters.some(c => c.id === id)) throw new Error("chapter not found"); return readJsonIfPresent(assertPath(this.root, `${RECOVERY}/${id}.json`)); }
+  async writeRecoveryDraft(id: string, draft: unknown): Promise<void> { const m = await load(this.root); if (!m.chapters.some(c => c.id === id)) throw new Error("chapter not found"); await mkdir(assertPath(this.root, RECOVERY), { recursive: true }); await atomic(assertPath(this.root, `${RECOVERY}/${id}.json`), JSON.stringify(draft, null, 2) + "\n"); }
+  async clearRecoveryDraft(id: string): Promise<void> { if (!safeId(id)) throw new Error("invalid chapter id"); await rm(assertPath(this.root, `${RECOVERY}/${id}.json`), { force: true }); }
   async createChapter(title: string, text = ""): Promise<Chapter> { const m = await load(this.root); const id = `chapter-${randomUUID().slice(0, 12)}`; const c = { id, title: title.trim() || id, file: `${MANUSCRIPT}/${id}.md`, order: m.chapters.length }; m.chapters.push(c); await atomic(assertPath(this.root, c.file), text); await saveManifest(this.root, m); return c; }
   async renameChapter(id: string, title: string): Promise<void> { const m = await load(this.root); const c = m.chapters.find(x => x.id === id); if (!c) throw new Error("chapter not found"); c.title = title.trim() || c.title; await saveManifest(this.root, m); }
   async reorderChapters(ids: readonly string[]): Promise<void> { const m = await load(this.root); if (ids.length !== m.chapters.length || new Set(ids).size !== ids.length || ids.some(id => !m.chapters.some(c => c.id === id))) throw new Error("invalid chapter order"); const byId = new Map(m.chapters.map(c => [c.id, c])); m.chapters = ids.map((id, order) => ({ ...byId.get(id)!, order })); await saveManifest(this.root, m); }
   async renameProject(title: string): Promise<void> { const m = await load(this.root); const next = title.trim(); if (next.length === 0 || next.length > 200) throw new Error("invalid project title"); m.title = next; await saveManifest(this.root, m); }
-  async deleteChapter(id: string): Promise<void> { const m = await load(this.root); const i = m.chapters.findIndex(x => x.id === id); if (i < 0) throw new Error("chapter not found"); const c = m.chapters[i]!; m.chapters.splice(i, 1); m.chapters.forEach((x, n) => x.order = n); await saveManifest(this.root, m); await rm(assertPath(this.root, c.file)); }
+  async deleteChapter(id: string): Promise<void> { const m = await load(this.root); const i = m.chapters.findIndex(x => x.id === id); if (i < 0) throw new Error("chapter not found"); const c = m.chapters[i]!; m.chapters.splice(i, 1); m.chapters.forEach((x, n) => x.order = n); await saveManifest(this.root, m); await rm(assertPath(this.root, c.file)); await this.clearRecoveryDraft(id); }
   async updateSettings(settings: ProjectSettings): Promise<void> { const m = await load(this.root); m.settings = { ...m.settings, ...settings }; delete (m.settings as Record<string, unknown>)["apiKey"]; await saveManifest(this.root, m); }
   async resetSetting(key: "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width"): Promise<void> { const m = await load(this.root); delete m.settings[key]; await saveManifest(this.root, m); }
   async search(query: string): Promise<SearchResult[]> { const m = await load(this.root); const out: SearchResult[] = []; for (const c of m.chapters) { const t = await readFile(assertPath(this.root, c.file), "utf8"); let at = 0; while ((at = t.indexOf(query, at)) >= 0) { out.push({ chapterId: c.id, title: c.title, file: c.file, start: at, end: at + query.length, excerpt: t.slice(Math.max(0, at - 40), at + query.length + 40) }); at += Math.max(1, query.length); } } return out; }

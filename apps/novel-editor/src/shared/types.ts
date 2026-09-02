@@ -1,9 +1,11 @@
 import type { RoleId } from "@novel-lens/editor-core";
 import type { Chapter, ProjectManifest, ProjectSettings } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+import type { EditorSessionState } from "./editor-session.js";
 
 export type { Chapter, ProjectManifest, ProjectSettings, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+export type { EditorSessionState } from "./editor-session.js";
 
 export interface ProjectSummary {
   root: string;
@@ -18,6 +20,32 @@ export interface ImportedDocumentSummary {
 export interface ChapterDocument {
   chapter: Chapter;
   text: string;
+  version: string;
+}
+
+export interface ChapterSaveResult {
+  version: string;
+}
+
+export interface RecoveryDraftInput {
+  chapterId: string;
+  text: string;
+  baseVersion: string;
+  selectionStart: number;
+  selectionEnd: number;
+  scrollTop: number;
+  scrollLeft: number;
+}
+
+export interface RecoveryDraft extends RecoveryDraftInput {
+  schemaVersion: 1;
+  updatedAt: string;
+}
+
+export interface RecoveryDraftResult {
+  draft: RecoveryDraft;
+  canonicalVersion: string;
+  conflict: boolean;
 }
 
 export interface SearchHit {
@@ -149,7 +177,12 @@ export interface NovelLensApi {
   openProject(): Promise<ProjectSummary | null>;
   refreshProject(root: string): Promise<ProjectSummary>;
   readChapter(root: string, chapterId: string): Promise<ChapterDocument>;
-  saveChapter(root: string, chapterId: string, text: string): Promise<void>;
+  saveChapter(root: string, chapterId: string, text: string): Promise<ChapterSaveResult>;
+  readEditorSession(root: string): Promise<EditorSessionState>;
+  writeEditorSession(root: string, session: EditorSessionState): Promise<EditorSessionState>;
+  readRecoveryDraft(root: string, chapterId: string): Promise<RecoveryDraftResult | null>;
+  writeRecoveryDraft(root: string, draft: RecoveryDraftInput): Promise<void>;
+  clearRecoveryDraft(root: string, chapterId: string): Promise<void>;
   createChapter(root: string, title: string): Promise<Chapter>;
   importDocuments(root: string): Promise<ImportedDocumentSummary | null>;
   renameChapter(root: string, chapterId: string, title: string): Promise<void>;

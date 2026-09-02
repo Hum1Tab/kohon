@@ -7,9 +7,10 @@ import { ProjectStore, type ProjectSettings } from "@novel-lens/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";
+import { sanitizeEditorSession } from "../shared/editor-session.js";
 import { COMMAND_DEFINITIONS, defaultUserSettings, toElectronAccelerator, type AppCommandId, type UserSettings } from "../shared/settings.js";
 import { runLens, type LensExecutionInput } from "./lens.js";
-import type { ChapterDocument, LensRunInput, ProjectSummary } from "../shared/types.js";
+import type { ChapterDocument, LensRunInput, ProjectSummary, RecoveryDraft, RecoveryDraftInput } from "../shared/types.js";
 import { ConnectionManager } from "./connections.js";
 import { SecureCredentialStore } from "./secure-credentials.js";
 import { installerLaunchArguments, LATEST_RELEASE_PAGE, UpdateManager } from "./updates.js";
@@ -57,6 +58,30 @@ function safeMessage(error: unknown): string {
     "invalid snapshot id": "保存点を確認できません。"
   };
   return translations[message] ?? message;
+}
+
+function recoveryDraftFrom(value: unknown, expectedChapterId: string): RecoveryDraft {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("復旧ドラフトを読み取れません。");
+  const source = value as Record<string, unknown>;
+  const text = source["text"];
+  const baseVersion = source["baseVersion"];
+  const updatedAt = source["updatedAt"];
+  if (source["schemaVersion"] !== 1 || source["chapterId"] !== expectedChapterId || typeof text !== "string" || text.length > 10_000_000 || typeof baseVersion !== "string" || !/^[a-f0-9]{64}$/u.test(baseVersion) || typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) throw new Error("復旧ドラフトを読み取れません。");
+  const offset = (key: keyof RecoveryDraftInput, maximum: number): number => {
+    const candidate = source[key];
+    if (typeof candidate !== "number" || !Number.isFinite(candidate)) return 0;
+    return Math.min(maximum, Math.max(0, Math.trunc(candidate)));
+  };
+  const selectionStart = offset("selectionStart", text.length);
+  const selectionEnd = Math.max(selectionStart, offset("selectionEnd", text.length));
+  return { schemaVersion: 1, chapterId: expectedChapterId, text, baseVersion, updatedAt, selectionStart, selectionEnd, scrollTop: offset("scrollTop", 1_000_000_000), scrollLeft: offset("scrollLeft", 1_000_000_000) };
+}
+
+function recoveryDraftForWrite(value: unknown): RecoveryDraft {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("復旧ドラフトを保存できません。");
+  const source = value as Record<string, unknown>;
+  if (typeof source["chapterId"] !== "string") throw new Error("章IDが不正です。");
+  return recoveryDraftFrom({ ...source, schemaVersion: 1, updatedAt: new Date().toISOString() }, source["chapterId"]);
 }
 
 function handle(channel: string, listener: (...args: any[]) => unknown | Promise<unknown>): void {
@@ -163,11 +188,47 @@ function registerIpc(): void {
     const manifest = await store.manifest();
     const chapter = manifest.chapters.find((item) => item.id === chapterId);
     if (chapter === undefined) throw new Error("chapter not found");
-    return { chapter, text: await store.readChapter(chapterId) };
+    const document = await store.readChapterWithVersion(chapterId);
+    return { chapter, ...document };
   });
   handle("chapter:save", async (root, chapterId, text) => {
     if (typeof chapterId !== "string" || typeof text !== "string" || text.length > 10_000_000) throw new Error("保存する本文を確認してください。");
-    await (await storeFor(root)).saveChapter(chapterId, text);
+    return { version: await (await storeFor(root)).saveChapter(chapterId, text) };
+  });
+  handle("editor-session:read", async (root) => {
+    const store = await storeFor(root);
+    const manifest = await store.manifest();
+    const sessionState = sanitizeEditorSession(await store.readEditorSession(), manifest.chapters.map((chapter) => chapter.id));
+    await store.writeEditorSession(sessionState);
+    return sessionState;
+  });
+  handle("editor-session:write", async (root, sessionState) => {
+    const store = await storeFor(root);
+    const manifest = await store.manifest();
+    const sanitized = sanitizeEditorSession(sessionState, manifest.chapters.map((chapter) => chapter.id));
+    await store.writeEditorSession(sanitized);
+    return sanitized;
+  });
+  handle("recovery:read", async (root, chapterId) => {
+    if (typeof chapterId !== "string") throw new Error("章IDが不正です。");
+    const store = await storeFor(root);
+    const stored = await store.readRecoveryDraft(chapterId);
+    if (stored === null) return null;
+    const draft = recoveryDraftFrom(stored, chapterId);
+    const canonical = await store.readChapterWithVersion(chapterId);
+    if (draft.text === canonical.text) {
+      await store.clearRecoveryDraft(chapterId);
+      return null;
+    }
+    return { draft, canonicalVersion: canonical.version, conflict: draft.baseVersion !== canonical.version };
+  });
+  handle("recovery:write", async (root, draftInput) => {
+    const draft = recoveryDraftForWrite(draftInput);
+    await (await storeFor(root)).writeRecoveryDraft(draft.chapterId, draft);
+  });
+  handle("recovery:clear", async (root, chapterId) => {
+    if (typeof chapterId !== "string") throw new Error("章IDが不正です。");
+    await (await storeFor(root)).clearRecoveryDraft(chapterId);
   });
   handle("chapter:create", async (root, title) => {
     if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) throw new Error("章タイトルを確認してください。");
@@ -340,6 +401,13 @@ function registerIpc(): void {
     closeApproved = true;
     if (closeFallback !== null) { clearTimeout(closeFallback); closeFallback = null; }
     mainWindow.close();
+  });
+  ipcMain.on("app:close-cancel", (event) => {
+    if (mainWindow === null || event.sender !== mainWindow.webContents) return;
+    closeApproved = false;
+    if (closeFallback !== null) { clearTimeout(closeFallback); closeFallback = null; }
+    mainWindow.show();
+    mainWindow.focus();
   });
 }
 
