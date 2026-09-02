@@ -154,10 +154,10 @@ export default function App(): ReactNode {
 
   const selectedDocument = useMemo(() => review?.documents.find((document) => document.document_id === selectedEvidence?.document_id) ?? null, [review, selectedEvidence]);
 
-  if (!ready) return <main className="shell"><h1>Novel Lens</h1><ErrorBanner message={error} /><p>{error === null ? "local sessionを確認しています…" : "ターミナルの起動URLを確認してください。"}</p></main>;
+  if (!ready) return <main className="shell"><h1>KOHON</h1><ErrorBanner message={error} /><p>{error === null ? "local sessionを確認しています…" : "ターミナルの起動URLを確認してください。"}</p></main>;
 
   return <main className="shell">
-    <header className="masthead"><div><p className="eyebrow">LOCAL · READ ONLY · GATE A</p><h1>Novel Lens</h1><p>作者の代わりに書かず、読者の視界を原文上で確かめる。</p></div><span className="local-badge">運営サーバーなし</span></header>
+    <header className="masthead"><div><p className="eyebrow">LOCAL · READ ONLY · GATE A</p><h1>KOHON</h1><p>作者の代わりに書かず、読者の視界を原文上で確かめる。</p></div><span className="local-badge">運営サーバーなし</span></header>
     <StepHeader current={screen} />
     <ErrorBanner message={error} />
 

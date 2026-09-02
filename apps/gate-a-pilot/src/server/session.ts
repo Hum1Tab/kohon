@@ -172,7 +172,7 @@ function providerInput(prepared: PreparedRun, condition: "generic" | "lens", run
   return {
     condition,
     provider_id: prepared.providerId,
-    endpoint_origin: prepared.providerId === "mock" ? "urn:novel-lens:mock" : "https://api.openai.com",
+    endpoint_origin: prepared.providerId === "mock" ? "urn:kohon:mock" : "https://api.openai.com",
     exact_model_id: prepared.modelId,
     instructions: instructionsFor(condition, "first-reader"),
     input_documents: prepared.context.documents.map((document) => ({

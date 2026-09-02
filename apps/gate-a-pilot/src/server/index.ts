@@ -16,7 +16,7 @@ server.listen(0, "127.0.0.1", () => {
   const address = server.address();
   if (address === null || typeof address === "string") throw new Error("Unable to determine local address");
   host = `127.0.0.1:${address.port}`;
-  process.stdout.write(`Novel Lens Gate A is ready:\nhttp://${host}/#token=${sessionToken}\n`);
+  process.stdout.write(`KOHON Gate A is ready:\nhttp://${host}/#token=${sessionToken}\n`);
 });
 
 function shutdown(): void {

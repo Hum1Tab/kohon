@@ -239,7 +239,7 @@ export class ConnectionManager {
       if (executable === null) return { cliInstalled: false, connected: false, state: "unavailable", message: "GitHub CLIが見つかりません。" };
       this.githubExecutable = executable;
       const auth = await runCommand(executable, ["auth", "status", "--active", "--hostname", "github.com"], 20_000);
-      if (auth.exitCode === 0) return { cliInstalled: true, connected: true, state: "connected", message: "利用者のGitHub CLI認証へ接続済みです。Novel Lensはtokenを読みません。" };
+      if (auth.exitCode === 0) return { cliInstalled: true, connected: true, state: "connected", message: "利用者のGitHub CLI認証へ接続済みです。KOHONはtokenを読みません。" };
       return { cliInstalled: true, connected: false, state: "disconnected", message: "GitHub CLIはinstall済みですが、github.comへ未ログインです。" };
     } catch (error) {
       const unavailable = error instanceof Error && "code" in error && error.code === "ENOENT";

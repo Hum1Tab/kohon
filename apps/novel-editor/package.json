@@ -1,17 +1,17 @@
 {
   "name": "@kohon/desktop",
-  "version": "0.4.0",
+  "version": "0.1.0",
   "description": "作者所有のMarkdown原稿、復元可能な履歴、根拠付きAIレンズを備えた日本語小説制作環境",
-  "author": "Novel Lens contributors",
-  "homepage": "https://github.com/Hum1Tab/novel-lens",
+  "author": "KOHON contributors",
+  "homepage": "https://github.com/Hum1Tab/kohon",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Hum1Tab/novel-lens.git"
+    "url": "https://github.com/Hum1Tab/kohon.git"
   },
   "bugs": {
-    "url": "https://github.com/Hum1Tab/novel-lens/issues"
+    "url": "https://github.com/Hum1Tab/kohon/issues"
   },
-  "desktopName": "novel-lens",
+  "desktopName": "kohon",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -44,14 +44,14 @@
     "vite": "8.2.2"
   },
   "build": {
-    "appId": "org.novellens.desktop",
-    "productName": "Novel Lens",
-    "executableName": "novel-lens",
+    "appId": "io.github.hum1tab.kohon",
+    "productName": "KOHON",
+    "executableName": "kohon",
     "asar": true,
     "asarUnpack": [
       "node_modules/@openai/codex-*/vendor/**/*"
     ],
-    "artifactName": "Novel-Lens-${version}-${os}-${arch}.${ext}",
+    "artifactName": "KOHON-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -72,7 +72,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "Novel-Lens-${version}-windows-${arch}-setup.${ext}",
+      "artifactName": "KOHON-${version}-windows-${arch}-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
@@ -80,7 +80,7 @@
       "createStartMenuShortcut": true
     },
     "portable": {
-      "artifactName": "Novel-Lens-${version}-windows-${arch}-portable.${ext}"
+      "artifactName": "KOHON-${version}-windows-${arch}-portable.${ext}"
     },
     "mac": {
       "target": ["dmg", "zip"],
@@ -91,7 +91,7 @@
     "linux": {
       "target": ["AppImage", "deb"],
       "category": "Office",
-      "maintainer": "Novel Lens contributors",
+      "maintainer": "KOHON contributors",
       "syncDesktopName": true,
       "synopsis": "Local-first Japanese novel writing environment"
     }

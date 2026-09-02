@@ -196,7 +196,7 @@ export async function runLens(input: LensExecutionInput, codexRunner?: CodexLens
         truncation: "disabled",
         tools: [],
         tool_choice: "none",
-        text: { format: { type: "json_schema", name: "novel_lens_desktop_feedback", strict: true, schema: OUTPUT_SCHEMA } }
+        text: { format: { type: "json_schema", name: "kohon_desktop_feedback", strict: true, schema: OUTPUT_SCHEMA } }
       }),
       redirect: "error",
       signal: controller.signal

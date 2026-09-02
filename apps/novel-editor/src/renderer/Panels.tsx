@@ -123,7 +123,7 @@ export function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromp
       onKeyDown={modal.onKeyDown}
       onSubmit={(event) => { event.preventDefault(); if (value.trim().length > 0) onSubmit(value.trim()); }}
     >
-      <span className="eyebrow">NOVEL LENS</span>
+      <span className="eyebrow">KOHON</span>
       <h2 id={`prompt-title-${request.id}`}>{request.title}</h2>
       <label>{request.label}<input autoFocus maxLength={200} value={value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setValue(event.target.value)} /></label>
       <div className="prompt-actions"><button type="button" className="secondary" onClick={onCancel}>キャンセル</button><button type="submit" className="primary" disabled={value.trim().length === 0}>{request.confirmLabel}</button></div>
@@ -134,7 +134,7 @@ export function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromp
 export function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, onOpen, onSettings }: { appInfo: AppInfo | null; busy: boolean; error: string | null; colorTheme: "default" | "light" | "dark"; onToggleTheme: () => void; onCreate: () => void; onOpen: () => void; onSettings: () => void }): ReactNode {
   return <main className="welcome">
     <header className="welcome-header">
-      <div className="welcome-brand"><AppIcon name="logo" size={30} tile /><span><b>Novel Lens</b><small>Writing workspace</small></span></div>
+      <div className="welcome-brand"><AppIcon name="logo" size={30} tile /><span><b>KOHON</b><small>Writing workspace</small></span></div>
       <div className="welcome-header-actions"><button className="icon-button" onClick={onToggleTheme} title="配色を切り替える" aria-label="配色を切り替える"><AppIcon name={colorTheme === "dark" ? "sun" : "moon"} /></button><button className="icon-button" onClick={onSettings} title="設定" aria-label="設定を開く"><AppIcon name="settings" /></button></div>
     </header>
 
@@ -152,14 +152,14 @@ export function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCre
       </div>
 
       <aside className="welcome-art" aria-hidden="true">
-        <span className="welcome-art-index">NOVEL LENS / 2026</span>
+        <span className="welcome-art-index">KOHON / 2026</span>
         <div className="welcome-art-mark"><AppIcon name="logo" size={196} tile /></div>
         <p>THE MANUSCRIPT<br />BELONGS TO THE AUTHOR.</p>
         <span className="welcome-art-side">LOCAL / MARKDOWN / PRIVATE</span>
       </aside>
     </section>
 
-    <footer className="welcome-footer"><div className="welcome-features"><span><AppIcon name="edit" /> 縦書き・横書き</span><span><AppIcon name="checkpoint" /> 自動保存と保存点</span><span><AppIcon name="lens" /> 根拠付きAIレンズ</span></div><small>Novel Lens {appInfo?.version ?? ""} · {appInfo?.platform ?? "desktop"}</small></footer>
+    <footer className="welcome-footer"><div className="welcome-features"><span><AppIcon name="edit" /> 縦書き・横書き</span><span><AppIcon name="checkpoint" /> 自動保存と保存点</span><span><AppIcon name="lens" /> 根拠付きAIレンズ</span></div><small>KOHON {appInfo?.version ?? ""} · {appInfo?.platform ?? "desktop"}</small></footer>
   </main>;
 }
 

@@ -15,6 +15,7 @@ import type { ChapterDocument, LensRunInput, ProjectSummary, RecoveryDraft, Reco
 import { ConnectionManager } from "./connections.js";
 import { SecureCredentialStore } from "./secure-credentials.js";
 import { installerLaunchArguments, LATEST_RELEASE_PAGE, UpdateManager } from "./updates.js";
+import { migrateLegacyUserData } from "./user-data-migration.js";
 import { UserSettingsStore } from "./user-settings.js";
 
 // The editor does not use GPU-heavy features. Software rendering avoids startup
@@ -53,7 +54,7 @@ function safeMessage(error: unknown): string {
   const message = error.message.replace(/[\r\n\u0000]+/gu, " ").slice(0, 500);
   const translations: Record<string, string> = {
     "chapter not found": "章が見つかりません。",
-    "invalid project manifest": "Novel Lens projectとして読み込めません。",
+    "invalid project manifest": "KOHON projectとして読み込めません。",
     "managed path boundary violation": "project外のファイル操作を拒否しました。",
     "invalid snapshot id": "保存点を確認できません。"
   };
@@ -491,7 +492,7 @@ function registerIpc(): void {
     const status = updateManager?.snapshot();
     const target = status?.releaseUrl ?? LATEST_RELEASE_PAGE;
     const url = new URL(target);
-    if (url.protocol !== "https:" || url.hostname !== "github.com" || !url.pathname.startsWith("/Hum1Tab/novel-lens/releases/")) throw new Error("更新先URLを確認できません。");
+    if (url.protocol !== "https:" || url.hostname !== "github.com" || !url.pathname.startsWith("/Hum1Tab/kohon/releases/")) throw new Error("更新先URLを確認できません。");
     await shell.openExternal(url.toString(), { activate: true });
   });
   handle("app:open-external", openExternalPage);
@@ -583,7 +584,7 @@ async function createWindow(): Promise<void> {
     minWidth: 980,
     minHeight: 680,
     backgroundColor: workbenchBackgroundColor(),
-    title: "Novel Lens",
+    title: "KOHON",
     show: false,
     webPreferences: {
       preload: join(__dirname, "../dist-preload/index.cjs"),
@@ -611,15 +612,18 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => { if (mainWindow !== null) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
   app.whenReady().then(async () => {
-    app.setAppUserModelId("org.novellens.desktop");
+    app.setAppUserModelId("io.github.hum1tab.kohon");
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
-    settingsStore = new UserSettingsStore(join(app.getPath("userData"), "settings.json"));
+    const userData = app.getPath("userData");
+    const appData = app.getPath("appData");
+    await migrateLegacyUserData(userData, [join(appData, "Novel Lens"), join(appData, "novel-lens")]);
+    settingsStore = new UserSettingsStore(join(userData, "settings.json"));
     userSettings = await settingsStore.load();
     nativeTheme.on("updated", () => { if (userSettings.appearance.colorTheme === "system") mainWindow?.setBackgroundColor(workbenchBackgroundColor()); });
-    updateManager = new UpdateManager(app.getVersion(), process.platform, process.arch, (status) => mainWindow?.webContents.send("updates:status", status), join(app.getPath("temp"), "Novel-Lens-updates"));
-    await connections.initializeOpenAI(new SecureCredentialStore(join(app.getPath("userData"), "openai-credential.bin")));
-    connections.initializeCodex(app.getVersion(), join(app.getPath("temp"), "Novel-Lens-Codex"));
+    updateManager = new UpdateManager(app.getVersion(), process.platform, process.arch, (status) => mainWindow?.webContents.send("updates:status", status), join(app.getPath("temp"), "KOHON-updates"));
+    await connections.initializeOpenAI(new SecureCredentialStore(join(userData, "openai-credential.bin")));
+    connections.initializeCodex(app.getVersion(), join(app.getPath("temp"), "KOHON-Codex"));
     registerIpc();
     installMenu();
     await createWindow();

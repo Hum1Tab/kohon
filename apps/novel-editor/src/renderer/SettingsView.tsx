@@ -206,7 +206,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
       <div className="settings-actions"><button className="secondary" disabled={busy !== null} onClick={() => void run("codex-models", props.onRefreshCodexModels)}>{busy === "codex-models" ? "更新中…" : "モデル一覧を更新"}</button><button className="text-button" disabled={busy !== null} onClick={() => { if (window.confirm("ChatGPTからログアウトしますか？ Codex CLIのログイン状態にも影響する場合があります。")) void run("codex-logout", props.onLogoutCodex); }}>ログアウト</button></div>
     </> : <button className="primary" disabled={busy !== null || !codex.installed} onClick={() => void run("codex-login", props.onLoginCodex)}>{busy === "codex-login" ? "ブラウザで認証中…" : "ChatGPTでログイン"}</button>}
     {!codex.installed && <button className="secondary" disabled={busy !== null} onClick={() => void run("codex-check", props.onRefreshConnections)}>Codex実行環境を再確認</button>}
-    <p className="settings-note">公式Codex App Serverのbrowser flowを使用します。AIレンズの実行はChatGPTプランのCodex利用枠へ計上され、認証tokenをNovel Lensのrendererや作品ファイルへ渡しません。</p>
+    <p className="settings-note">公式Codex App Serverのbrowser flowを使用します。AIレンズの実行はChatGPTプランのCodex利用枠へ計上され、認証tokenをKOHONのrendererや作品ファイルへ渡しません。</p>
   </div>;
 
   return <div ref={modal.ref} className="settings-view" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={modal.onKeyDown}>
@@ -225,7 +225,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
         {error !== null && <div className="settings-error" role="alert">{error}<button aria-label="エラーを閉じる" onClick={() => setError(null)}>×</button></div>}
         {props.category === "general" && <SettingsSection eyebrow="APPLICATION" title="全般" lead="アプリ全体の動作を設定します。作品本文には保存されません。">
           <SettingRow title="自動保存" description="入力を止めてから保存するまでの時間です。IME変換中は保存しません。"><select value={props.settings.general.autoSaveDelayMs} onChange={(event) => void props.onUpdateUser({ general: { autoSaveDelayMs: Number(event.target.value) } })}><option value="400">0.4秒</option><option value="800">0.8秒</option><option value="1500">1.5秒</option><option value="3000">3秒</option></select></SettingRow>
-          <SettingRow title="設定の保存場所" description="ユーザー設定はOSのNovel Lens設定フォルダーに保存します。APIキーとGitHub tokenは含みません。"><StatusBadge state="ok">ローカルのみ</StatusBadge></SettingRow>
+          <SettingRow title="設定の保存場所" description="ユーザー設定はOSのKOHON設定フォルダーに保存します。APIキーとGitHub tokenは含みません。"><StatusBadge state="ok">ローカルのみ</StatusBadge></SettingRow>
         </SettingsSection>}
         {props.category === "appearance" && <SettingsSection eyebrow="APPEARANCE" title="外観" lead="作業UIの色と表示密度を設定します。原稿キャンバスの紙色はエディター設定で独立して選べます。">
           <SettingRow title="カラーテーマ" description="ブランド既定、純白、VS Code風の黒を明確に分けます。"><select value={props.settings.appearance.colorTheme} onChange={(event) => void props.onUpdateUser({ appearance: { colorTheme: event.target.value as "system" | "default" | "light" | "dark" } })}><option value="default">既定（森と紙）</option><option value="light">ホワイト</option><option value="dark">ダーク</option><option value="system">OSに合わせる</option></select></SettingRow>
@@ -259,14 +259,14 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
             <p className="settings-note">このAPIキー方式を選んだ場合だけAPI Platformの従量課金が適用されます。確認後のキーはrendererから消去し、利用可能な端末ではOSの暗号化ストレージへ保存します。</p>
           </div>
         </SettingsSection>}
-        {props.category === "accounts" && <SettingsSection eyebrow="ACCOUNTS" title="アカウント" lead="認証情報はNovel Lensのサーバーを経由しません。">
+        {props.category === "accounts" && <SettingsSection eyebrow="ACCOUNTS" title="アカウント" lead="認証情報はKOHONのサーバーを経由しません。">
           {codexCard}
           <div className="connection-card">
             <div className="connection-heading"><div><h3>GitHub</h3><p>{connections.github.message}</p></div><StatusBadge state={connections.github.connected ? "ok" : connections.github.state === "error" ? "warn" : "muted"}>{connections.github.connected ? "接続済み" : connections.github.cliInstalled ? "未ログイン" : "CLIなし"}</StatusBadge></div>
             {!connections.github.connected && connections.github.cliInstalled && <button className="primary" disabled={busy !== null} onClick={() => void run("github", props.onLoginGitHub)}>{busy === "github" ? "ブラウザで確認中…" : "GitHubへログイン"}</button>}
             {!connections.github.cliInstalled && <button className="secondary" onClick={() => void props.onOpenExternal("github-cli")}>GitHub CLIをinstall</button>}
             <div className="connection-links"><button onClick={() => void props.onRefreshConnections()}>状態を再確認</button><button onClick={() => void props.onOpenExternal("github-applications")}>GitHub側で認証を管理</button></div>
-            <p className="settings-note">公式GitHub CLIのbrowser flowを使用します。tokenはOS credential storeまたはGitHub CLIが管理し、Novel Lensはtoken値を読みません。</p>
+            <p className="settings-note">公式GitHub CLIのbrowser flowを使用します。tokenはOS credential storeまたはGitHub CLIが管理し、KOHONはtoken値を読みません。</p>
           </div>
         </SettingsSection>}
         {props.category === "keyboard" && <SettingsSection eyebrow="KEYBOARD" title="キーボード ショートカット" lead="キー割り当てをクリックし、使いたい組み合わせを押します。Backspaceで未設定にできます。">
@@ -282,7 +282,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
           {props.appInfo?.platform === "win32" && <p className="settings-note">Windowsでは確認後にアプリを閉じ、画面を出さずに更新して自動で再起動します。</p>}
           <p className="settings-note">作品フォルダーはアプリの外にあるため、更新・再install・uninstallで原稿を削除しません。ダウンロードはGitHub ReleaseのSHA-256と照合します。preview版は未署名のため、起動後のOS警告を確認してください。</p>
         </SettingsSection>}
-        {props.category === "about" && <SettingsSection eyebrow="ABOUT" title="Novel Lens" lead="作者が書くことを中心に置く、ローカル優先のOSS小説制作環境です。">
+        {props.category === "about" && <SettingsSection eyebrow="ABOUT" title="KOHON" lead="作者が書くことを中心に置く、ローカル優先のOSS小説制作環境です。">
           <div className="about-grid"><span>Version</span><code>{props.appInfo?.version ?? "-"}</code><span>Platform</span><code>{props.appInfo?.platform ?? "desktop"}</code><span>License</span><code>Apache-2.0</code><span>データ</span><code>Markdown / local-first</code></div>
           <button className="secondary" onClick={() => void props.onOpenExternal("latest-release")}>GitHub Releases</button>
         </SettingsSection>}

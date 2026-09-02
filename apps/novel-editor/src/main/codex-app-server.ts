@@ -180,7 +180,7 @@ export class CodexAppServer {
       cwd: this.scratchDirectory,
       approvalPolicy: "never",
       sandbox: "readOnly",
-      serviceName: "novel_lens"
+      serviceName: "kohon"
     }, 30_000));
     const threadId = stringValue(record(threadResponse["thread"])["id"]);
     if (threadId === null) throw new Error("Codexの会話を開始できませんでした。");
@@ -241,7 +241,7 @@ export class CodexAppServer {
   private async performStart(): Promise<void> {
     const executable = installedExecutable();
     if (executable === null) {
-      this.update({ installed: false, connected: false, state: "unavailable", message: "Codex実行環境が見つかりません。Novel Lensを再インストールしてください。" });
+      this.update({ installed: false, connected: false, state: "unavailable", message: "Codex実行環境が見つかりません。KOHONを再インストールしてください。" });
       throw new Error(this.status.message);
     }
     this.update({ installed: true, connected: false, state: "starting", message: "Codex App Serverを起動しています…" });
@@ -258,7 +258,7 @@ export class CodexAppServer {
     child.once("error", (error) => this.handleExit(error));
     child.once("close", (code) => this.handleExit(new Error(this.lastStderr.trim() || `Codex App Serverが終了しました（${code ?? -1}）。`)));
     try {
-      await this.request("initialize", { clientInfo: { name: "novel_lens", title: "Novel Lens", version: this.clientVersion } }, 30_000);
+      await this.request("initialize", { clientInfo: { name: "kohon", title: "KOHON", version: this.clientVersion } }, 30_000);
       this.notify("initialized", {});
     } catch (error) {
       this.stop();
@@ -313,7 +313,7 @@ export class CodexAppServer {
     if (child === null || child.stdin.destroyed) return;
     if (method === "item/permissions/requestApproval") child.stdin.write(`${JSON.stringify({ id, result: { permissions: {}, scope: "turn" } })}\n`);
     else if (method.includes("requestApproval")) child.stdin.write(`${JSON.stringify({ id, result: { decision: "decline" } })}\n`);
-    else child.stdin.write(`${JSON.stringify({ id, error: { code: -32601, message: "Novel Lens does not expose interactive Codex tools." } })}\n`);
+    else child.stdin.write(`${JSON.stringify({ id, error: { code: -32601, message: "KOHON does not expose interactive Codex tools." } })}\n`);
   }
 
   private handleNotification(method: string, params: JsonRecord): void {

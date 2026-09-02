@@ -5,8 +5,8 @@ import { basename, join } from "node:path";
 
 import type { UpdateStatus } from "../shared/types.js";
 
-const LATEST_RELEASE_API = "https://api.github.com/repos/Hum1Tab/novel-lens/releases/latest";
-export const LATEST_RELEASE_PAGE = "https://github.com/Hum1Tab/novel-lens/releases/latest";
+const LATEST_RELEASE_API = "https://api.github.com/repos/Hum1Tab/kohon/releases/latest";
+export const LATEST_RELEASE_PAGE = "https://github.com/Hum1Tab/kohon/releases/latest";
 const MAX_INSTALLER_BYTES = 512 * 1024 * 1024;
 
 export interface ReleaseAsset {
@@ -37,7 +37,7 @@ export function compareVersions(left: string, right: string): number {
 function isAllowedReleaseUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "github.com" && /^\/Hum1Tab\/novel-lens\/releases\/(?:latest|tag\/[^/]+|download\/[^/]+\/[^/]+)$/u.test(url.pathname);
+    return url.protocol === "https:" && url.hostname === "github.com" && /^\/Hum1Tab\/kohon\/releases\/(?:latest|tag\/[^/]+|download\/[^/]+\/[^/]+)$/u.test(url.pathname);
   } catch { return false; }
 }
 
@@ -45,7 +45,7 @@ function isAllowedDownloadResponse(value: string): boolean {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:") return false;
-    return (url.hostname === "github.com" && url.pathname.startsWith("/Hum1Tab/novel-lens/releases/download/"))
+    return (url.hostname === "github.com" && url.pathname.startsWith("/Hum1Tab/kohon/releases/download/"))
       || url.hostname === "release-assets.githubusercontent.com";
   } catch { return false; }
 }
@@ -131,7 +131,7 @@ export class UpdateManager {
     private readonly platform: NodeJS.Platform,
     private readonly architecture: string,
     private readonly onStatus: (status: UpdateStatus) => void,
-    private readonly downloadDirectory = join(tmpdir(), "Novel-Lens-updates")
+    private readonly downloadDirectory = join(tmpdir(), "KOHON-updates")
   ) {
     this.status = { state: "idle", currentVersion, latestVersion: null, checkedAt: null, downloadUrl: null, assetName: null, progress: null, releaseUrl: LATEST_RELEASE_PAGE, message: "更新はまだ確認していません。" };
   }
@@ -156,7 +156,7 @@ export class UpdateManager {
     const timer = setTimeout(() => controller.abort(), 20_000);
     try {
       const response = await fetch(LATEST_RELEASE_API, {
-        headers: { Accept: "application/vnd.github+json", "User-Agent": `Novel-Lens/${this.currentVersion}`, "X-GitHub-Api-Version": "2022-11-28" },
+        headers: { Accept: "application/vnd.github+json", "User-Agent": `KOHON/${this.currentVersion}`, "X-GitHub-Api-Version": "2022-11-28" },
         redirect: "error",
         signal: controller.signal
       });
@@ -213,7 +213,7 @@ export class UpdateManager {
     this.set({ ...this.status, state: "downloading", progress: 0, message: `${asset.name} をダウンロードしています…` });
     try {
       const response = await fetch(asset.browser_download_url, {
-        headers: { "User-Agent": `Novel-Lens/${this.currentVersion}` },
+        headers: { "User-Agent": `KOHON/${this.currentVersion}` },
         redirect: "follow",
         signal: controller.signal
       });

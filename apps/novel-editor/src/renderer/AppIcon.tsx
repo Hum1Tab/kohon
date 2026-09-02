@@ -36,7 +36,7 @@ const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
 
 export function AppIcon({ name, size = 20, tile = false, title, className, ...props }: AppIconProps) {
   const id = useId().replace(/:/gu, "");
-  const label = title ?? (name === "logo" ? "Novel Lens" : undefined);
+  const label = title ?? (name === "logo" ? "KOHON" : undefined);
   return <svg
     {...props}
     className={className}
