@@ -1,9 +1,9 @@
 import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ChapterKind, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
+import type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
-export type { Chapter, ChapterKind, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
+export type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 export type { EditorSessionState } from "./editor-session.js";
 
@@ -204,6 +204,7 @@ export interface NovelLensApi {
   mergeChapterIntoPrevious(root: string, chapterId: string): Promise<ChapterMergeResult>;
   importDocuments(root: string): Promise<ImportedDocumentSummary | null>;
   renameChapter(root: string, chapterId: string, title: string): Promise<void>;
+  updateChapterMetadata(root: string, chapterId: string, metadata: ChapterMetadata): Promise<ProjectSummary>;
   reorderChapters(root: string, chapterIds: string[]): Promise<ProjectSummary>;
   renameProject(root: string, title: string): Promise<ProjectSummary>;
   deleteChapter(root: string, chapterId: string): Promise<void>;

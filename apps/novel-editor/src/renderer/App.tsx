@@ -31,6 +31,7 @@ import type {
   AppInfo,
   ChapterDocument,
   ChapterKind,
+  ChapterMetadata,
   CheckpointEntry,
   CodexModelOption,
   ConnectionStatus,
@@ -56,7 +57,7 @@ import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
 import { EditorFindBar } from "./EditorFindBar.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
-import { DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, Welcome, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
+import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, Welcome, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
 
 type QuickAccessMode = "commands" | "chapters";
 type EditorTabDragState = { groupId: EditorGroupId; chapterId: string };
@@ -935,6 +936,20 @@ export function App(): ReactNode {
     catch (cause) { setError(errorText(cause)); }
   }, [chapter, project, refreshProject, requestText]);
 
+  const saveChapterMetadata = useCallback(async (metadata: ChapterMetadata): Promise<void> => {
+    if (project === null || activeChapterId === null) return;
+    try {
+      const refreshed = await window.novelLens.updateChapterMetadata(project.root, activeChapterId, metadata);
+      const found = refreshed.manifest.chapters.find((item) => item.id === activeChapterId);
+      setProject(refreshed);
+      if (found !== undefined) setEditorBuffers((current) => {
+        const buffer = current.buffers[found.id];
+        return buffer === undefined ? current : loadBuffer(current, { chapter: found, text: buffer.text, savedText: buffer.savedText, version: buffer.version, saveState: buffer.saveState, recoveryConflict: buffer.recoveryConflict });
+      });
+      setNotice("章・場面情報を保存しました。");
+    } catch (cause) { setError(errorText(cause)); throw cause; }
+  }, [activeChapterId, project]);
+
   const deleteChapter = useCallback(async (): Promise<void> => {
     if (project === null || chapter === null) return;
     if (manifestChapters.length <= 1) { setError("作品には少なくとも1つの章・場面が必要です。"); return; }
@@ -1645,6 +1660,7 @@ export function App(): ReactNode {
           </button>;
         })}
       </nav>
+      {chapter !== null && <ChapterMetadataPanel key={`${chapter.chapter.id}:${JSON.stringify(chapter.chapter.metadata ?? {})}`} chapter={chapter.chapter} onSave={saveChapterMetadata} />}
       <OutlineNotes notes={notes} activeChapterId={activeChapterId} activeNote={activeNote} draft={noteDraft} saveState={noteSaveState} showAll={showAllNotes} onShowAll={setShowAllNotes} onCreate={createNote} onOpen={openNote} onDraft={updateNoteDraft} onTogglePin={toggleCurrentChapterPin} onSave={saveActiveNote} onArchive={setActiveNoteArchived} />
       <div className="outline-footer"><code title={project.root}>{project.root}</code><span>Markdown正本</span></div>
     </div>;

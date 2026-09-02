@@ -3,6 +3,9 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   AppInfo,
+  Chapter,
+  ChapterMetadata,
+  ChapterStatus,
   CheckpointEntry,
   CodexModelOption,
   LensFinding,
@@ -23,6 +26,7 @@ import { AppIcon } from "./AppIcon.js";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 export type NoteDraft = { id: string; title: string; kind: NoteKind; chapterIds: string[]; text: string };
+type ChapterMetadataDraft = { summary: string; pov: string; characters: string; location: string; timeline: string; status: "" | ChapterStatus; tags: string };
 
 export interface TextPromptRequest {
   id: number;
@@ -40,6 +44,68 @@ export const EMPTY_THREADS = (): Record<RoleId, LensMessage[]> => ({ "first-read
 function formatDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("ja-JP", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function metadataDraft(metadata: ChapterMetadata | undefined): ChapterMetadataDraft {
+  return {
+    summary: metadata?.summary ?? "",
+    pov: metadata?.pov ?? "",
+    characters: metadata?.characters?.join("、") ?? "",
+    location: metadata?.location ?? "",
+    timeline: metadata?.timeline ?? "",
+    status: metadata?.status ?? "",
+    tags: metadata?.tags?.join("、") ?? ""
+  };
+}
+
+function splitMetadataList(value: string): string[] | undefined {
+  const items = value.split(/[、,]/u).map((item) => item.trim()).filter(Boolean);
+  return items.length === 0 ? undefined : [...new Set(items)];
+}
+
+function metadataValue(draft: ChapterMetadataDraft): ChapterMetadata {
+  const optional = (value: string): string | undefined => value.trim().length === 0 ? undefined : value.trim();
+  const summary = optional(draft.summary);
+  const pov = optional(draft.pov);
+  const characters = splitMetadataList(draft.characters);
+  const location = optional(draft.location);
+  const timeline = optional(draft.timeline);
+  const tags = splitMetadataList(draft.tags);
+  return {
+    ...(summary === undefined ? {} : { summary }),
+    ...(pov === undefined ? {} : { pov }),
+    ...(characters === undefined ? {} : { characters }),
+    ...(location === undefined ? {} : { location }),
+    ...(timeline === undefined ? {} : { timeline }),
+    ...(draft.status === "" ? {} : { status: draft.status }),
+    ...(tags === undefined ? {} : { tags })
+  };
+}
+
+export function ChapterMetadataPanel({ chapter, onSave }: { chapter: Chapter; onSave: (metadata: ChapterMetadata) => Promise<void> }): ReactNode {
+  const [draft, setDraft] = useState(() => metadataDraft(chapter.metadata));
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const value = metadataValue(draft);
+  const dirty = JSON.stringify(value) !== JSON.stringify(chapter.metadata ?? {});
+  const patch = (next: Partial<ChapterMetadataDraft>): void => { setDraft((current) => ({ ...current, ...next })); setFailed(false); };
+  const save = async (): Promise<void> => {
+    setSaving(true); setFailed(false);
+    try { await onSave(value); }
+    catch { setFailed(true); }
+    finally { setSaving(false); }
+  };
+  return <details className="chapter-metadata">
+    <summary><span>章・場面情報</span><small>{Object.keys(chapter.metadata ?? {}).length === 0 ? "任意" : "設定済み"}</small></summary>
+    <div className="chapter-metadata-form">
+      <label>要約<textarea rows={3} maxLength={2000} value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} placeholder="この場面で起きること" /></label>
+      <div className="metadata-row"><label>視点人物<input maxLength={200} value={draft.pov} onChange={(event) => patch({ pov: event.target.value })} /></label><label>場所<input maxLength={200} value={draft.location} onChange={(event) => patch({ location: event.target.value })} /></label></div>
+      <div className="metadata-row"><label>時系列<input maxLength={200} value={draft.timeline} onChange={(event) => patch({ timeline: event.target.value })} placeholder="一日目・夕方" /></label><label>状態<select value={draft.status} onChange={(event) => patch({ status: event.target.value as ChapterMetadataDraft["status"] })}><option value="">未設定</option><option value="idea">構想</option><option value="draft">下書き</option><option value="revising">推敲中</option><option value="done">完了</option></select></label></div>
+      <label>登場人物<input maxLength={1000} value={draft.characters} onChange={(event) => patch({ characters: event.target.value })} placeholder="読点で区切る" /></label>
+      <label>タグ<input maxLength={1000} value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} placeholder="伏線、回想" /></label>
+      <div className="metadata-actions"><small>{failed ? "保存できませんでした" : dirty ? "未保存" : "保存済み"}</small><button className="text-button" disabled={!dirty || saving} onClick={() => { void save(); }}>{saving ? "保存中…" : "保存"}</button></div>
+    </div>
+  </details>;
 }
 
 export function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromptRequest; onCancel: () => void; onSubmit: (value: string) => void }): ReactNode {

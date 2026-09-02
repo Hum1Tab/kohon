@@ -24,6 +24,7 @@ const api: NovelLensApi = {
   mergeChapterIntoPrevious: (root, chapterId) => invoke("chapter:merge-previous", root, chapterId),
   importDocuments: (root) => invoke("chapter:import", root),
   renameChapter: (root, chapterId, title) => invoke("chapter:rename", root, chapterId, title),
+  updateChapterMetadata: (root, chapterId, metadata) => invoke("chapter:metadata", root, chapterId, metadata),
   reorderChapters: (root, chapterIds) => invoke("chapter:reorder", root, chapterIds),
   renameProject: (root, title) => invoke("project:rename", root, title),
   deleteChapter: (root, chapterId) => invoke("chapter:delete", root, chapterId),

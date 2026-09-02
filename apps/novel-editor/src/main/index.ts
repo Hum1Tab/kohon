@@ -277,6 +277,12 @@ function registerIpc(): void {
     if (typeof chapterId !== "string" || typeof title !== "string" || title.trim().length === 0 || title.length > 200) throw new Error("章タイトルを確認してください。");
     await (await storeFor(root)).renameChapter(chapterId, title);
   });
+  handle("chapter:metadata", async (root, chapterId, metadata) => {
+    if (typeof chapterId !== "string" || typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) throw new Error("章・場面情報を確認してください。");
+    const store = await storeFor(root);
+    await store.updateChapterMetadata(chapterId, metadata);
+    return summary(store);
+  });
   handle("chapter:reorder", async (root, chapterIds) => {
     if (!Array.isArray(chapterIds) || chapterIds.some((id) => typeof id !== "string")) throw new Error("章順を確認できません。");
     const store = await storeFor(root);
