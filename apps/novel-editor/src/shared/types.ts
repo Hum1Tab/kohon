@@ -213,6 +213,7 @@ export interface NovelLensApi {
   restoreCheckpoint(root: string, commit: string): Promise<ProjectSummary>;
   createVariation(root: string): Promise<string | null>;
   exportMarkdown(root: string): Promise<string | null>;
+  exportText(root: string): Promise<string | null>;
   runLens(input: LensRunInput): Promise<LensRunResult>;
   listReviewFindings(root: string): Promise<ReviewLedgerEntry[]>;
   setReviewFindingStatus(root: string, id: string, status: ReviewStatus): Promise<ReviewLedgerEntry[]>;

@@ -97,4 +97,5 @@ export class ProjectStore {
   }
   async createVariation(dir: string): Promise<void> { await cp(this.root, dir, { recursive: true, force: false, errorOnExist: true, filter: s => !s.includes(`${resolve(this.root)}\\${INTERNAL}`) && !s.endsWith(`${resolve(this.root)}/${INTERNAL}`) }); }
   async exportMarkdown(): Promise<string> { const m = await load(this.root); const parts: string[] = []; for (const c of [...m.chapters].sort((a,b) => a.order-b.order)) parts.push(`# ${c.title}\n\n${await this.readChapter(c.id)}`); return parts.join("\n\n---\n\n") + "\n"; }
+  async exportText(): Promise<string> { const m = await load(this.root); const parts: string[] = []; for (const c of [...m.chapters].sort((a,b) => a.order-b.order)) parts.push(`${c.title}\n\n${(await this.readChapter(c.id)).replace(/[\r\n]+$/u, "")}`); return `${parts.join("\n\n\n")}\n`; }
 }

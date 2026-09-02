@@ -32,6 +32,7 @@ export type AppCommandId =
   | "editor.moveTabToOtherGroup"
   | "history.checkpoint"
   | "file.export"
+  | "file.exportText"
   | "view.settings"
   | "view.settings.appearance"
   | "view.settings.layout"
@@ -75,6 +76,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "editor.moveTabToOtherGroup", label: "章タブを別のエディターへ移動", category: "表示", defaultBinding: "" },
   { id: "history.checkpoint", label: "保存点を作る", category: "履歴", defaultBinding: "Mod+Shift+S" },
   { id: "file.export", label: "Markdownを書き出す", category: "ファイル", defaultBinding: "Mod+Alt+E" },
+  { id: "file.exportText", label: "TXTを書き出す", category: "ファイル", defaultBinding: "" },
   { id: "view.settings", label: "設定を開く", category: "表示", defaultBinding: "Mod+," },
   { id: "view.settings.appearance", label: "外観設定を開く", category: "設定", defaultBinding: "" },
   { id: "view.settings.layout", label: "レイアウト設定を開く", category: "設定", defaultBinding: "" },

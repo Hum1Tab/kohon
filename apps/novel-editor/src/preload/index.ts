@@ -36,6 +36,7 @@ const api: NovelLensApi = {
   restoreCheckpoint: (root, commit) => invoke("history:restore", root, commit),
   createVariation: (root) => invoke("project:variation", root),
   exportMarkdown: (root) => invoke("project:export", root),
+  exportText: (root) => invoke("project:export-text", root),
   runLens: (input) => invoke("lens:run", input),
   listReviewFindings: (root) => invoke("reviews:list", root),
   setReviewFindingStatus: (root, id, status) => invoke("reviews:set-status", root, id, status),

@@ -754,6 +754,12 @@ export function App(): ReactNode {
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers]);
 
+  const exportText = useCallback(async (): Promise<void> => {
+    if (project === null) return;
+    try { await saveAllBuffers(); const path = await window.novelLens.exportText(project.root); if (path !== null) setNotice(`TXTを書き出しました: ${path}`); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [project, saveAllBuffers]);
+
   const refreshProject = useCallback(async (): Promise<ProjectSummary | null> => {
     if (project === null) return null;
     const refreshed = await window.novelLens.refreshProject(project.root);
@@ -1394,6 +1400,7 @@ export function App(): ReactNode {
     else if (action === "editor.moveTabToOtherGroup") moveActiveEditorTabToOtherGroup();
     else if (action === "history.checkpoint") void createCheckpoint();
     else if (action === "file.export") void exportProject();
+    else if (action === "file.exportText") void exportText();
     else if (action === "view.settings") openSettings("general");
     else if (action === "view.settings.appearance") openSettings("appearance");
     else if (action === "view.settings.layout") openSettings("layout");
@@ -1409,7 +1416,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, insertRuby, isComposing, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
+  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;

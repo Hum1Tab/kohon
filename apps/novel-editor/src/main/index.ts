@@ -360,6 +360,18 @@ function registerIpc(): void {
     await writeFile(selected.filePath, await store.exportMarkdown(), "utf8");
     return selected.filePath;
   });
+  handle("project:export-text", async (root) => {
+    const store = await storeFor(root);
+    const selected = await dialog.showSaveDialog(mainWindow!, {
+      title: "作品を結合テキストとして書き出す",
+      defaultPath: join(dirname(store.root), `${basename(store.root)}.txt`),
+      buttonLabel: "書き出す",
+      filters: [{ name: "Text", extensions: ["txt"] }]
+    });
+    if (selected.canceled || selected.filePath.length === 0) return null;
+    await writeFile(selected.filePath, await store.exportText(), "utf8");
+    return selected.filePath;
+  });
   handle("lens:run", async (input) => {
     if (typeof input !== "object" || input === null) throw new Error("AI requestを確認してください。");
     const source = input as LensRunInput;
@@ -491,6 +503,7 @@ function installMenu(): void {
         commandMenuItem("file.save"),
         commandMenuItem("history.checkpoint"),
         commandMenuItem("file.export"),
+        commandMenuItem("file.exportText"),
         { type: "separator" },
         { role: process.platform === "darwin" ? "close" : "quit" }
       ]
