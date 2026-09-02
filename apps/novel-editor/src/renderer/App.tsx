@@ -6,7 +6,7 @@ import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConf
 import { closeEditorGroup, closeEditorTab, defaultEditorSession, moveEditorTab, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
 import { clearTextHistory, createEditorHistory, recordTextEdit, redoTextEdit, undoTextEdit, type EditOrigin, type TextSelection } from "../shared/editor-history.js";
-import { insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
+import { annotateSelectionAsTateChuYoko, insertParagraphIndent, isTateChuYokoCandidate, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithJapaneseQuotes, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
 import {
   COMMAND_DEFINITIONS,
   defaultLayout,
@@ -1472,6 +1472,14 @@ export function App(): ReactNode {
     applyJapaneseInput((input) => wrapSelectionWithRuby(input, reading.trim()), true);
   }, [applyJapaneseInput, isComposing, requestText]);
 
+  const annotateTateChuYoko = useCallback((): void => {
+    const editor = editorRef.current;
+    if (isComposing || editor === null) return;
+    const selected = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+    if (!isTateChuYokoCandidate(selected)) { setError("縦中横にする半角英数字を2〜3文字選択してください。"); return; }
+    applyJapaneseInput(annotateSelectionAsTateChuYoko, true);
+  }, [applyJapaneseInput, isComposing]);
+
   const moveActiveEditorTab = useCallback((delta: -1 | 1): void => {
     setEditorSession((current) => {
       const group = current.groups.find((candidate) => candidate.id === current.activeGroupId);
@@ -1513,6 +1521,8 @@ export function App(): ReactNode {
     else if (action === "editor.emphasis") applyJapaneseInput(wrapSelectionWithBouten, true);
     else if (action === "editor.normalizePunctuation") applyJapaneseInput(normalizeSelectedPunctuation, true);
     else if (action === "editor.indentedParagraph") applyJapaneseInput(insertParagraphIndent);
+    else if (action === "editor.japaneseQuotes") applyJapaneseInput(wrapSelectionWithJapaneseQuotes);
+    else if (action === "editor.tateChuYoko") annotateTateChuYoko();
     else if (action === "editor.moveTabLeft") moveActiveEditorTab(-1);
     else if (action === "editor.moveTabRight") moveActiveEditorTab(1);
     else if (action === "editor.moveTabToOtherGroup") moveActiveEditorTabToOtherGroup();
@@ -1536,7 +1546,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, stepEditorHistory, userSettings.layout]);
+  }, [annotateTateChuYoko, applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, stepEditorHistory, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;

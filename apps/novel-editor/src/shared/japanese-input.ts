@@ -74,3 +74,31 @@ export function normalizeSelectedPunctuation(input: TextareaSelection): Japanese
 export function insertParagraphIndent(input: TextareaSelection): JapaneseInputResult {
   return replaceSelection(input, "\n　", false);
 }
+
+/** Inserts Japanese corner brackets explicitly; no automatic IME interception is used. */
+export function wrapSelectionWithJapaneseQuotes(input: TextareaSelection): JapaneseInputResult {
+  const selection = selectionOf(input);
+  const selected = input.text.slice(selection.start, selection.end);
+  const replacement = `「${selected}」`;
+  const nextText = input.text.slice(0, selection.start) + replacement + input.text.slice(selection.end);
+  return {
+    nextText,
+    nextSelectionStart: selection.start + 1,
+    nextSelectionEnd: selection.start + 1 + selected.length
+  };
+}
+
+/** JLReq's common short alphanumeric case; longer spans should remain ordinary text. */
+export function isTateChuYokoCandidate(value: string): boolean {
+  return /^[A-Za-z0-9]{2,3}$/u.test(value);
+}
+
+/** Uses the published Aozora Bunko annotation instead of inventing an opaque syntax. */
+export function annotateSelectionAsTateChuYoko(input: TextareaSelection): JapaneseInputResult {
+  const selection = selectionOf(input);
+  const selected = input.text.slice(selection.start, selection.end);
+  if (!isTateChuYokoCandidate(selected)) return { nextText: input.text, nextSelectionStart: selection.start, nextSelectionEnd: selection.end };
+  const annotation = `［＃「${selected}」は縦中横］`;
+  const nextText = input.text.slice(0, selection.end) + annotation + input.text.slice(selection.end);
+  return { nextText, nextSelectionStart: selection.start, nextSelectionEnd: selection.end };
+}

@@ -29,6 +29,8 @@ export type AppCommandId =
   | "editor.emphasis"
   | "editor.normalizePunctuation"
   | "editor.indentedParagraph"
+  | "editor.japaneseQuotes"
+  | "editor.tateChuYoko"
   | "editor.moveTabLeft"
   | "editor.moveTabRight"
   | "editor.moveTabToOtherGroup"
@@ -77,6 +79,8 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "editor.emphasis", label: "選択範囲に傍点", category: "編集", defaultBinding: "" },
   { id: "editor.normalizePunctuation", label: "選択範囲の三点リーダー・ダッシュを整える", category: "編集", defaultBinding: "" },
   { id: "editor.indentedParagraph", label: "字下げした段落を挿入", category: "編集", defaultBinding: "" },
+  { id: "editor.japaneseQuotes", label: "鉤括弧で囲む", category: "編集", defaultBinding: "" },
+  { id: "editor.tateChuYoko", label: "選択範囲を縦中横として注記", category: "編集", defaultBinding: "" },
   { id: "editor.moveTabLeft", label: "章タブを左へ移動", category: "表示", defaultBinding: "" },
   { id: "editor.moveTabRight", label: "章タブを右へ移動", category: "表示", defaultBinding: "" },
   { id: "editor.moveTabToOtherGroup", label: "章タブを別のエディターへ移動", category: "表示", defaultBinding: "" },

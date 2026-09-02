@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithRuby } from "./japanese-input.js";
+import { annotateSelectionAsTateChuYoko, insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithJapaneseQuotes, wrapSelectionWithRuby } from "./japanese-input.js";
 
 describe("Japanese input helpers", () => {
   it("wraps the selected UTF-16 range in ruby and bouten notation", () => {
@@ -30,5 +30,15 @@ describe("Japanese input helpers", () => {
       nextSelectionStart: 5,
       nextSelectionEnd: 5
     });
+  });
+
+  it("inserts paired corner brackets without intercepting normal typing", () => {
+    expect(wrapSelectionWithJapaneseQuotes({ text: "前本文後", selectionStart: 1, selectionEnd: 3 })).toEqual({ nextText: "前「本文」後", nextSelectionStart: 2, nextSelectionEnd: 4 });
+    expect(wrapSelectionWithJapaneseQuotes({ text: "前後", selectionStart: 1, selectionEnd: 1 })).toEqual({ nextText: "前「」後", nextSelectionStart: 2, nextSelectionEnd: 2 });
+  });
+
+  it("adds the published Aozora tate-chu-yoko annotation only to short alphanumerics", () => {
+    expect(annotateSelectionAsTateChuYoko({ text: "B29編隊", selectionStart: 1, selectionEnd: 3 })).toEqual({ nextText: "B29［＃「29」は縦中横］編隊", nextSelectionStart: 1, nextSelectionEnd: 3 });
+    expect(annotateSelectionAsTateChuYoko({ text: "2026年", selectionStart: 0, selectionEnd: 4 }).nextText).toBe("2026年");
   });
 });
