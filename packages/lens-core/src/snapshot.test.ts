@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import type { ProviderRequest } from "./provider.js";
-import { validateContract } from "@novel-lens/contracts/validator";
+import { validateContract } from "@kohon/contracts/validator";
 import { describe, expect, it } from "vitest";
 
 import { assertProviderPayloadBoundary, requestContainsForbiddenText } from "./boundary.js";

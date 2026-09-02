@@ -1,5 +1,5 @@
 {
-  "name": "@novel-lens/core",
+  "name": "@kohon/core",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
@@ -17,7 +17,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('tsconfig.tsbuildinfo',{force:true})\""
   },
   "dependencies": {
-    "@novel-lens/contracts": "workspace:*",
+    "@kohon/contracts": "workspace:*",
     "json-canonicalize": "3.0.0"
   }
 }

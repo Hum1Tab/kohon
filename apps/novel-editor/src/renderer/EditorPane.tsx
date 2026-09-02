@@ -1,4 +1,4 @@
-import type { TextStats } from "@novel-lens/editor-core";
+import type { TextStats } from "@kohon/editor-core";
 import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode } from "react";
 import type { EditorBuffer } from "../shared/editor-buffers.js";
 import type { EditorGroupId, EditorSessionState } from "../shared/editor-session.js";

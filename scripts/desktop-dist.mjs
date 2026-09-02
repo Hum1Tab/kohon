@@ -72,12 +72,12 @@ function runPnpm(arguments_) {
   });
 }
 
-await runPnpm(["--filter", "@novel-lens/editor-core", "build"]);
-await runPnpm(["--filter", "@novel-lens/project-store", "build"]);
-await runPnpm(["--filter", "@novel-lens/desktop", "build"]);
+await runPnpm(["--filter", "@kohon/editor-core", "build"]);
+await runPnpm(["--filter", "@kohon/project-store", "build"]);
+await runPnpm(["--filter", "@kohon/desktop", "build"]);
 await runPnpm([
   "--filter",
-  "@novel-lens/desktop",
+  "@kohon/desktop",
   "exec",
   "electron-builder",
   ...builderArguments,

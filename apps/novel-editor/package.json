@@ -1,5 +1,5 @@
 {
-  "name": "@novel-lens/desktop",
+  "name": "@kohon/desktop",
   "version": "0.4.0",
   "description": "作者所有のMarkdown原稿、復元可能な履歴、根拠付きAIレンズを備えた日本語小説制作環境",
   "author": "Novel Lens contributors",
@@ -27,8 +27,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('dist-main',{recursive:true,force:true});require('node:fs').rmSync('dist-preload',{recursive:true,force:true});require('node:fs').rmSync('release',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@novel-lens/editor-core": "workspace:*",
-    "@novel-lens/project-store": "workspace:*",
+    "@kohon/editor-core": "workspace:*",
+    "@kohon/project-store": "workspace:*",
     "@openai/codex": "0.152.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -4,8 +4,8 @@ import type {
   MediaType,
   NewlineStyle,
   UnicodeNormalization
-} from "@novel-lens/contracts";
-import { SCHEMA_VERSION } from "@novel-lens/contracts";
+} from "@kohon/contracts";
+import { SCHEMA_VERSION } from "@kohon/contracts";
 
 import { GateAError } from "./errors.js";
 import { sha256Bytes, sha256Canonical, sha256Text } from "./hash.js";

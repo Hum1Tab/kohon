@@ -1,4 +1,4 @@
-import type { CorpusDocument, ModelEvidence, ValidatedEvidence } from "@novel-lens/contracts";
+import type { CorpusDocument, ModelEvidence, ValidatedEvidence } from "@kohon/contracts";
 
 export interface CrossVersionAnchorResult {
   status: "attached" | "reattachment-candidate" | "ambiguous" | "missing";

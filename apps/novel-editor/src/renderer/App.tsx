@@ -1,4 +1,4 @@
-import { textStats, type TextStats } from "@novel-lens/editor-core";
+import { textStats, type TextStats } from "@kohon/editor-core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
@@ -283,15 +283,15 @@ export function App(): ReactNode {
   }, []);
 
   useEffect(() => {
-    void window.novelLens.appInfo().then(setAppInfo).catch(() => undefined);
-    void window.novelLens.connectionStatus().then(setConnections).catch(() => undefined);
-    void window.novelLens.getUserSettings().then((loaded) => {
+    void window.kohon.appInfo().then(setAppInfo).catch(() => undefined);
+    void window.kohon.connectionStatus().then(setConnections).catch(() => undefined);
+    void window.kohon.getUserSettings().then((loaded) => {
       setUserSettings(loaded);
       setProvider(loaded.ai.defaultProvider);
       setModelId(loaded.ai.defaultProvider === "openai" ? loaded.ai.openaiModel : loaded.ai.codexModel);
     }).catch(() => undefined);
-    const removeUpdateListener = window.novelLens.onUpdateStatus(setUpdateStatus);
-    const removeConnectionListener = window.novelLens.onConnectionStatus(setConnections);
+    const removeUpdateListener = window.kohon.onUpdateStatus(setUpdateStatus);
+    const removeConnectionListener = window.kohon.onConnectionStatus(setConnections);
     return () => { removeUpdateListener(); removeConnectionListener(); };
   }, []);
 
@@ -301,7 +301,7 @@ export function App(): ReactNode {
     const fallback = connections.codex.models.find((model) => model.id === "gpt-5.6-luna") ?? connections.codex.models.find((model) => model.isDefault) ?? connections.codex.models[0];
     if (fallback === undefined) return;
     setModelId(fallback.id);
-    void window.novelLens.updateUserSettings({ ai: { codexModel: fallback.id } }).then(setUserSettings).catch(() => undefined);
+    void window.kohon.updateUserSettings({ ai: { codexModel: fallback.id } }).then(setUserSettings).catch(() => undefined);
   }, [connections.codex.models, modelId, provider]);
 
   const manifestChapters = useMemo(() => [...(project?.manifest.chapters ?? [])].sort((a, b) => a.order - b.order), [project]);
@@ -378,7 +378,7 @@ export function App(): ReactNode {
   useEffect(() => {
     if (project === null || sessionHydratedRootRef.current !== project.root) return;
     const timer = window.setTimeout(() => {
-      void window.novelLens.writeEditorSession(project.root, editorSession).catch((cause) => setError(errorText(cause)));
+      void window.kohon.writeEditorSession(project.root, editorSession).catch((cause) => setError(errorText(cause)));
     }, 250);
     return () => window.clearTimeout(timer);
   }, [editorSession, project]);
@@ -423,13 +423,13 @@ export function App(): ReactNode {
     setEditorBuffers((current) => beginSave(current, chapterId));
     const operation = saveQueueRef.current.catch(() => undefined).then(async () => {
       try {
-        const result = await window.novelLens.saveChapter(snapshot.root, snapshot.chapterId, snapshot.text);
+        const result = await window.kohon.saveChapter(snapshot.root, snapshot.chapterId, snapshot.text);
         const latest = editorBuffersRef.current.buffers[chapterId];
         setEditorBuffers((current) => saveSucceeded(current, chapterId, { text: snapshot.text, version: result.version }));
         if (latest === undefined || latest.text === snapshot.text) {
-          await window.novelLens.clearRecoveryDraft(snapshot.root, snapshot.chapterId);
+          await window.kohon.clearRecoveryDraft(snapshot.root, snapshot.chapterId);
         } else {
-          await window.novelLens.writeRecoveryDraft(snapshot.root, currentDraftInput(snapshot.chapterId, latest.text, result.version));
+          await window.kohon.writeRecoveryDraft(snapshot.root, currentDraftInput(snapshot.chapterId, latest.text, result.version));
         }
       } catch (cause) {
         setEditorBuffers((current) => saveFailed(current, chapterId));
@@ -453,7 +453,7 @@ export function App(): ReactNode {
     setNoteSaveState("saving");
     const operation = noteSaveQueueRef.current.catch(() => undefined).then(async () => {
       try {
-        const saved = await window.novelLens.saveNote(project.root, snapshot.id, snapshot.title, snapshot.kind, snapshot.chapterIds, snapshot.text);
+        const saved = await window.kohon.saveNote(project.root, snapshot.id, snapshot.title, snapshot.kind, snapshot.chapterIds, snapshot.text);
         activeNoteRef.current = saved;
         setActiveNote(saved);
         setNotes((current) => current.map((note) => note.id === saved.note.id ? saved.note : note));
@@ -494,7 +494,7 @@ export function App(): ReactNode {
   useEffect(() => {
     if (project === null || activeChapterId === null || text === savedText || activeBuffer === undefined || activeBuffer.version.length === 0 || isComposing || recoveryConflict?.draft.chapterId === activeChapterId) return;
     const timer = window.setTimeout(() => {
-      void window.novelLens.writeRecoveryDraft(project.root, currentDraftInput(activeChapterId, text, activeBuffer.version)).catch((cause) => setError(errorText(cause)));
+      void window.kohon.writeRecoveryDraft(project.root, currentDraftInput(activeChapterId, text, activeBuffer.version)).catch((cause) => setError(errorText(cause)));
     }, 300);
     return () => window.clearTimeout(timer);
   }, [activeBuffer, activeChapterId, currentDraftInput, isComposing, project, recoveryConflict, savedText, text]);
@@ -607,7 +607,7 @@ export function App(): ReactNode {
 
   const displayChapter = useCallback(async (root: string, next: ChapterDocument, view?: EditorTabState, range?: { start: number; end: number }, restoreView = true): Promise<void> => {
     let recovery: RecoveryDraftResult | null = null;
-    try { recovery = await window.novelLens.readRecoveryDraft(root, next.chapter.id); }
+    try { recovery = await window.kohon.readRecoveryDraft(root, next.chapter.id); }
     catch (cause) { setError(errorText(cause)); }
     const recovered = recovery !== null && !recovery.conflict;
     const displayedText = recovery !== null && !recovery.conflict ? recovery.draft.text : next.text;
@@ -633,7 +633,7 @@ export function App(): ReactNode {
     for (const group of sessionState.groups) {
       if (group.activeChapterId === null || loaded.has(group.activeChapterId)) continue;
       loaded.add(group.activeChapterId);
-      const document = await window.novelLens.readChapter(root, group.activeChapterId);
+      const document = await window.kohon.readChapter(root, group.activeChapterId);
       await displayChapter(root, document, group.tabs.find((item) => item.chapterId === group.activeChapterId), undefined, group.id === activeGroup?.id);
     }
   }, [displayChapter]);
@@ -653,7 +653,7 @@ export function App(): ReactNode {
         textRef.current = existing.text;
         if (range !== undefined) focusRange(range.start, range.end); else restoreEditorView(view);
       } else {
-        const next = await window.novelLens.readChapter(project.root, chapterId);
+        const next = await window.kohon.readChapter(project.root, chapterId);
         await displayChapter(project.root, next, view, range);
       }
     } catch (cause) { setError(errorText(cause)); }
@@ -662,13 +662,13 @@ export function App(): ReactNode {
 
   const adoptProject = useCallback(async (next: ProjectSummary | null): Promise<void> => {
     if (next === null) return;
-    const restoredSession = await window.novelLens.readEditorSession(next.root);
+    const restoredSession = await window.kohon.readEditorSession(next.root);
     let restoredReviews: ReviewLedgerEntry[] = [];
     let restoredNotes: NoteMeta[] = [];
     let reviewWarning: string | null = null;
-    try { restoredReviews = await window.novelLens.listReviewFindings(next.root); }
+    try { restoredReviews = await window.kohon.listReviewFindings(next.root); }
     catch (cause) { reviewWarning = `指摘台帳を読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
-    try { restoredNotes = await window.novelLens.listNotes(next.root); }
+    try { restoredNotes = await window.kohon.listNotes(next.root); }
     catch (cause) { reviewWarning = `${reviewWarning === null ? "" : `${reviewWarning} `}作業メモを読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
     sessionHydratedRootRef.current = next.root;
     setProject(next);
@@ -716,7 +716,7 @@ export function App(): ReactNode {
       return;
     }
     if (editorBuffersRef.current.buffers[nextId] !== undefined) return;
-    const loaded = await window.novelLens.readChapter(project.root, nextId);
+    const loaded = await window.kohon.readChapter(project.root, nextId);
     const nextView = nextGroup?.tabs.find((item) => item.chapterId === nextId);
     await displayChapter(project.root, loaded, nextView);
   }, [captureEditorView, displayChapter, editorSession, project, saveChapterBuffer]);
@@ -762,7 +762,7 @@ export function App(): ReactNode {
   const discardRecoveryDraft = useCallback(async (): Promise<void> => {
     if (project === null || recoveryConflict === null) return;
     try {
-      await window.novelLens.clearRecoveryDraft(project.root, recoveryConflict.draft.chapterId);
+      await window.kohon.clearRecoveryDraft(project.root, recoveryConflict.draft.chapterId);
       setEditorBuffers((current) => dismissRecoveryConflict(current, recoveryConflict.draft.chapterId));
       setNotice("復旧ドラフトを破棄し、現在の保存内容を維持しました。");
     } catch (cause) { setError(errorText(cause)); }
@@ -777,33 +777,33 @@ export function App(): ReactNode {
     });
     if (title === null || title.trim().length === 0) return;
     await saveAllBuffers(); clearMessages(); setBusy(true);
-    try { await adoptProject(await window.novelLens.createProject(title.trim())); }
+    try { await adoptProject(await window.kohon.createProject(title.trim())); }
     catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
   }, [adoptProject, clearMessages, requestText, saveAllBuffers]);
 
   const openProject = useCallback(async (): Promise<void> => {
     await saveAllBuffers(); clearMessages(); setBusy(true);
-    try { await adoptProject(await window.novelLens.openProject()); }
+    try { await adoptProject(await window.kohon.openProject()); }
     catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
   }, [adoptProject, clearMessages, saveAllBuffers]);
 
   const exportProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.novelLens.exportMarkdown(project.root); if (path !== null) setNotice(`Markdownを書き出しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.exportMarkdown(project.root); if (path !== null) setNotice(`Markdownを書き出しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers]);
 
   const exportText = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.novelLens.exportText(project.root); if (path !== null) setNotice(`TXTを書き出しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.exportText(project.root); if (path !== null) setNotice(`TXTを書き出しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers]);
 
   const refreshProject = useCallback(async (): Promise<ProjectSummary | null> => {
     if (project === null) return null;
-    const refreshed = await window.novelLens.refreshProject(project.root);
+    const refreshed = await window.kohon.refreshProject(project.root);
     setProject(refreshed);
     return refreshed;
   }, [project]);
@@ -818,7 +818,7 @@ export function App(): ReactNode {
       confirmLabel: "追加する"
     });
     if (title === null || title.trim().length === 0) return;
-    try { await saveNow(); const created = await window.novelLens.createChapter(project.root, title.trim(), kind); await refreshProject(); await loadChapter(created.id); }
+    try { await saveNow(); const created = await window.kohon.createChapter(project.root, title.trim(), kind); await refreshProject(); await loadChapter(created.id); }
     catch (cause) { setError(errorText(cause)); }
   }, [loadChapter, manifestChapters, project, refreshProject, requestText, saveNow]);
 
@@ -826,7 +826,7 @@ export function App(): ReactNode {
     if (project === null) return;
     try {
       await saveAllBuffers();
-      const imported = await window.novelLens.importDocuments(project.root);
+      const imported = await window.kohon.importDocuments(project.root);
       if (imported === null) return;
       setProject(imported.project);
       const firstId = imported.importedChapterIds[0];
@@ -845,7 +845,7 @@ export function App(): ReactNode {
     const current = ids[index]!;
     ids[index] = ids[destination]!;
     ids[destination] = current;
-    try { setProject(await window.novelLens.reorderChapters(project.root, ids)); }
+    try { setProject(await window.kohon.reorderChapters(project.root, ids)); }
     catch (cause) { setError(errorText(cause)); }
   }, [manifestChapters, project]);
 
@@ -863,7 +863,7 @@ export function App(): ReactNode {
     ids.splice(insertionIndex, 0, chapterDragId);
     setChapterDragId(null); setChapterDropIndex(null);
     if (ids.every((id, index) => id === manifestChapters[index]?.id)) return;
-    try { setProject(await window.novelLens.reorderChapters(project.root, ids)); }
+    try { setProject(await window.kohon.reorderChapters(project.root, ids)); }
     catch (cause) { setError(errorText(cause)); }
   }, [chapterDragId, manifestChapters, project]);
 
@@ -880,7 +880,7 @@ export function App(): ReactNode {
     if (project === null) return;
     try {
       await saveActiveNote();
-      const document = await window.novelLens.readNote(project.root, id);
+      const document = await window.kohon.readNote(project.root, id);
       const draft = draftFromNote(document);
       activeNoteRef.current = document; noteDraftRef.current = draft;
       setActiveNote(document); setNoteDraft(draft); setNoteSaveState("saved");
@@ -893,7 +893,7 @@ export function App(): ReactNode {
     if (title === null) return;
     try {
       await saveActiveNote();
-      const document = await window.novelLens.createNote(project.root, title, "memo", activeChapterId === null ? [] : [activeChapterId]);
+      const document = await window.kohon.createNote(project.root, title, "memo", activeChapterId === null ? [] : [activeChapterId]);
       const draft = draftFromNote(document);
       activeNoteRef.current = document; noteDraftRef.current = draft;
       setNotes((current) => [...current, document.note]); setActiveNote(document); setNoteDraft(draft); setNoteSaveState("saved");
@@ -910,7 +910,7 @@ export function App(): ReactNode {
     if (project === null || activeNoteRef.current === null) return;
     try {
       await saveActiveNote();
-      const updated = await window.novelLens.setNoteArchived(project.root, activeNoteRef.current.note.id, archived);
+      const updated = await window.kohon.setNoteArchived(project.root, activeNoteRef.current.note.id, archived);
       setNotes(updated);
       const note = updated.find((candidate) => candidate.id === activeNoteRef.current?.note.id);
       if (note !== undefined && activeNoteRef.current !== null) { const document = { ...activeNoteRef.current, note }; activeNoteRef.current = document; setActiveNote(document); }
@@ -926,7 +926,7 @@ export function App(): ReactNode {
       confirmLabel: "変更する"
     });
     if (title === null || title.trim().length === 0 || title.trim() === project.manifest.title) return;
-    try { setProject(await window.novelLens.renameProject(project.root, title.trim())); }
+    try { setProject(await window.kohon.renameProject(project.root, title.trim())); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, requestText]);
 
@@ -939,14 +939,14 @@ export function App(): ReactNode {
       confirmLabel: "変更する"
     });
     if (title === null || title.trim().length === 0 || title.trim() === chapter.chapter.title) return;
-    try { await window.novelLens.renameChapter(project.root, chapter.chapter.id, title.trim()); const refreshed = await refreshProject(); const found = refreshed?.manifest.chapters.find((item) => item.id === chapter.chapter.id); if (found !== undefined) setEditorBuffers((current) => { const buffer = current.buffers[found.id]; return buffer === undefined ? current : loadBuffer(current, { chapter: found, text: buffer.text, savedText: buffer.savedText, version: buffer.version, saveState: buffer.saveState, recoveryConflict: buffer.recoveryConflict }); }); }
+    try { await window.kohon.renameChapter(project.root, chapter.chapter.id, title.trim()); const refreshed = await refreshProject(); const found = refreshed?.manifest.chapters.find((item) => item.id === chapter.chapter.id); if (found !== undefined) setEditorBuffers((current) => { const buffer = current.buffers[found.id]; return buffer === undefined ? current : loadBuffer(current, { chapter: found, text: buffer.text, savedText: buffer.savedText, version: buffer.version, saveState: buffer.saveState, recoveryConflict: buffer.recoveryConflict }); }); }
     catch (cause) { setError(errorText(cause)); }
   }, [chapter, project, refreshProject, requestText]);
 
   const saveChapterMetadata = useCallback(async (metadata: ChapterMetadata): Promise<void> => {
     if (project === null || activeChapterId === null) return;
     try {
-      const refreshed = await window.novelLens.updateChapterMetadata(project.root, activeChapterId, metadata);
+      const refreshed = await window.kohon.updateChapterMetadata(project.root, activeChapterId, metadata);
       const found = refreshed.manifest.chapters.find((item) => item.id === activeChapterId);
       setProject(refreshed);
       if (found !== undefined) setEditorBuffers((current) => {
@@ -963,18 +963,18 @@ export function App(): ReactNode {
     if (!window.confirm(`「${chapter.chapter.title}」を削除します。直前に保存点を作成します。よろしいですか？`)) return;
     try {
       await saveNow();
-      await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」削除前`);
+      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」削除前`);
       const oldIndex = activeIndex;
-      await window.novelLens.deleteChapter(project.root, chapter.chapter.id);
+      await window.kohon.deleteChapter(project.root, chapter.chapter.id);
       editorHistoryRef.current = clearTextHistory(editorHistoryRef.current, chapter.chapter.id);
       const refreshed = await refreshProject();
       const next = refreshed?.manifest.chapters[Math.max(0, Math.min(oldIndex, (refreshed?.manifest.chapters.length ?? 1) - 1))];
       if (next !== undefined) {
-        const restoredSession = openEditorTab(await window.novelLens.readEditorSession(project.root), next.id);
+        const restoredSession = openEditorTab(await window.kohon.readEditorSession(project.root), next.id);
         setEditorSession(restoredSession);
         const referenced = restoredSession.groups.flatMap((item) => item.tabs.map((tabState) => tabState.chapterId));
         setEditorBuffers((current) => pruneBuffers(current, referenced));
-        const loaded = await window.novelLens.readChapter(project.root, next.id);
+        const loaded = await window.kohon.readChapter(project.root, next.id);
         await displayChapter(project.root, loaded, restoredSession.groups[0]?.tabs.find((item) => item.chapterId === next.id));
       }
     } catch (cause) { setError(errorText(cause)); }
@@ -990,15 +990,15 @@ export function App(): ReactNode {
     if (title === null) return;
     try {
       await saveAllBuffers();
-      await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」場面分割前`);
+      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」場面分割前`);
       const captured = captureEditorView();
-      const result = await window.novelLens.splitChapter(project.root, chapter.chapter.id, offset, title);
+      const result = await window.kohon.splitChapter(project.root, chapter.chapter.id, offset, title);
       const nextSession = openEditorTab(captured, result.created.id, captured.activeGroupId);
       setProject(result.project); setEditorSession(nextSession);
       await reloadOpenBuffers(project.root, nextSession);
-      setNotes(await window.novelLens.listNotes(project.root));
-      setReviewFindings(await window.novelLens.listReviewFindings(project.root));
-      setCheckpoints(await window.novelLens.listCheckpoints(project.root));
+      setNotes(await window.kohon.listNotes(project.root));
+      setReviewFindings(await window.kohon.listReviewFindings(project.root));
+      setCheckpoints(await window.kohon.listCheckpoints(project.root));
       setNotice(`「${result.created.title}」へ分割しました。`);
     } catch (cause) { setError(errorText(cause)); }
   }, [captureEditorView, chapter, manifestChapters, project, reloadOpenBuffers, requestText, saveAllBuffers]);
@@ -1009,26 +1009,26 @@ export function App(): ReactNode {
     if (!window.confirm(`「${chapter.chapter.title}」を前の「${target.title}」へ結合します。実行前の保存点は自動で残します。`)) return;
     try {
       await saveAllBuffers();
-      const targetBefore = await window.novelLens.readChapter(project.root, target.id);
-      await window.novelLens.createCheckpoint(project.root, `「${chapter.chapter.title}」結合前`);
+      const targetBefore = await window.kohon.readChapter(project.root, target.id);
+      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」結合前`);
       let nextSession = captureEditorView();
       const sourceGroupId = nextSession.activeGroupId;
-      const result = await window.novelLens.mergeChapterIntoPrevious(project.root, chapter.chapter.id);
+      const result = await window.kohon.mergeChapterIntoPrevious(project.root, chapter.chapter.id);
       for (const group of [...nextSession.groups]) nextSession = closeEditorTab(nextSession, group.id, chapter.chapter.id);
       nextSession = openEditorTab(nextSession, result.target.id, sourceGroupId);
       setProject(result.project); setEditorSession(nextSession);
       await reloadOpenBuffers(project.root, nextSession);
       focusRange(targetBefore.text.length, targetBefore.text.length);
-      setNotes(await window.novelLens.listNotes(project.root));
-      setReviewFindings(await window.novelLens.listReviewFindings(project.root));
-      setCheckpoints(await window.novelLens.listCheckpoints(project.root));
+      setNotes(await window.kohon.listNotes(project.root));
+      setReviewFindings(await window.kohon.listReviewFindings(project.root));
+      setCheckpoints(await window.kohon.listCheckpoints(project.root));
       setNotice(`「${result.target.title}」へ結合しました。`);
     } catch (cause) { setError(errorText(cause)); }
   }, [activeIndex, captureEditorView, chapter, focusRange, manifestChapters, project, reloadOpenBuffers, saveAllBuffers]);
 
   const runSearch = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0) { setSearchHits([]); return; }
-    try { const query = searchQuery.trim(); await saveAllBuffers(); setSearchHits(await window.novelLens.search(project.root, query, searchCaseSensitive)); setSearchRun({ query, caseSensitive: searchCaseSensitive }); }
+    try { const query = searchQuery.trim(); await saveAllBuffers(); setSearchHits(await window.kohon.search(project.root, query, searchCaseSensitive)); setSearchRun({ query, caseSensitive: searchCaseSensitive }); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers, searchCaseSensitive, searchQuery]);
 
@@ -1038,16 +1038,16 @@ export function App(): ReactNode {
     if (!window.confirm(`${chapterCount}章の${searchHits.length}件を置換します。実行前の保存点は自動で作成されます。よろしいですか？`)) return;
     try {
       await saveAllBuffers();
-      const result = await window.novelLens.replaceProjectText(project.root, searchQuery.trim(), searchReplacement, searchCaseSensitive);
+      const result = await window.kohon.replaceProjectText(project.root, searchQuery.trim(), searchReplacement, searchCaseSensitive);
       await reloadOpenBuffers(project.root, editorSession);
-      setSearchHits(await window.novelLens.search(project.root, searchQuery.trim(), searchCaseSensitive));
+      setSearchHits(await window.kohon.search(project.root, searchQuery.trim(), searchCaseSensitive));
       setNotice(`${result.chapterCount}章の${result.count}件を置換しました。`);
     } catch (cause) { setError(errorText(cause)); }
   }, [editorSession, project, reloadOpenBuffers, saveAllBuffers, searchCaseSensitive, searchHits, searchQuery, searchReplacement, searchRun]);
 
   const loadCheckpoints = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { setCheckpoints(await window.novelLens.listCheckpoints(project.root)); }
+    try { setCheckpoints(await window.kohon.listCheckpoints(project.root)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
@@ -1065,19 +1065,19 @@ export function App(): ReactNode {
       confirmLabel: "保存点を作る"
     });
     if (subject === null || subject.trim().length === 0) return;
-    try { await saveAllBuffers(); await window.novelLens.createCheckpoint(project.root, subject.trim()); await loadCheckpoints(); setNotice("保存点を作成しました。"); }
+    try { await saveAllBuffers(); await window.kohon.createCheckpoint(project.root, subject.trim()); await loadCheckpoints(); setNotice("保存点を作成しました。"); }
     catch (cause) { setError(errorText(cause)); }
   }, [loadCheckpoints, project, requestText, saveAllBuffers]);
 
   const compareCurrentCheckpoint = useCallback(async (entry: CheckpointEntry): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); setHistoryDiff(await window.novelLens.compareCurrentToCheckpoint(project.root, entry.commit)); }
+    try { await saveAllBuffers(); setHistoryDiff(await window.kohon.compareCurrentToCheckpoint(project.root, entry.commit)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers]);
 
   const compareCheckpointPair = useCallback(async (leftCommit: string, rightCommit: string): Promise<void> => {
     if (project === null || leftCommit === rightCommit) return;
-    try { setHistoryDiff(await window.novelLens.compareCheckpoints(project.root, leftCommit, rightCommit)); }
+    try { setHistoryDiff(await window.kohon.compareCheckpoints(project.root, leftCommit, rightCommit)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
@@ -1085,20 +1085,20 @@ export function App(): ReactNode {
     if (project === null || !window.confirm(`保存点「${entry.subject}」へ戻します。現在の状態は復元前の保存点として残します。`)) return;
     try {
       await saveAllBuffers();
-      const restored = await window.novelLens.restoreCheckpoint(project.root, entry.commit);
+      const restored = await window.kohon.restoreCheckpoint(project.root, entry.commit);
       editorHistoryRef.current = createEditorHistory();
       setProject(restored);
       setEditorBuffers(createEditorBuffers());
       const desired = restored.manifest.chapters.find((item) => item.id === activeChapterId) ?? restored.manifest.chapters[0];
       if (desired !== undefined) {
-        const restoredSession = openEditorTab(await window.novelLens.readEditorSession(restored.root), desired.id);
+        const restoredSession = openEditorTab(await window.kohon.readEditorSession(restored.root), desired.id);
         setEditorSession(restoredSession);
         const activeGroup = restoredSession.groups.find((group) => group.id === restoredSession.activeGroupId) ?? restoredSession.groups[0];
-        const loaded = await window.novelLens.readChapter(restored.root, desired.id);
+        const loaded = await window.kohon.readChapter(restored.root, desired.id);
         await displayChapter(restored.root, loaded, activeGroup?.tabs.find((item) => item.chapterId === desired.id));
         for (const group of restoredSession.groups) {
           if (group.id === activeGroup?.id || group.activeChapterId === null || group.activeChapterId === desired.id) continue;
-          const background = await window.novelLens.readChapter(restored.root, group.activeChapterId);
+          const background = await window.kohon.readChapter(restored.root, group.activeChapterId);
           await displayChapter(restored.root, background, group.tabs.find((item) => item.chapterId === group.activeChapterId), undefined, false);
         }
       }
@@ -1111,37 +1111,37 @@ export function App(): ReactNode {
     if (project === null || !window.confirm(`「${title}」だけを選択した保存点へ戻します。他の章は変更しません。復元前の全体状態も自動で残します。`)) return;
     try {
       await saveAllBuffers();
-      const restored = await window.novelLens.restoreCheckpointChapter(project.root, commit, chapterId);
+      const restored = await window.kohon.restoreCheckpointChapter(project.root, commit, chapterId);
       setProject(restored);
       await reloadOpenBuffers(restored.root, editorSession);
-      setReviewFindings(await window.novelLens.listReviewFindings(restored.root));
-      setCheckpoints(await window.novelLens.listCheckpoints(restored.root));
-      setHistoryDiff(await window.novelLens.compareCurrentToCheckpoint(restored.root, commit));
+      setReviewFindings(await window.kohon.listReviewFindings(restored.root));
+      setCheckpoints(await window.kohon.listCheckpoints(restored.root));
+      setHistoryDiff(await window.kohon.compareCurrentToCheckpoint(restored.root, commit));
       setNotice(`「${title}」だけを保存点から復元しました。`);
     } catch (cause) { setError(errorText(cause)); }
   }, [editorSession, project, reloadOpenBuffers, saveAllBuffers]);
 
   const createVariation = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.novelLens.createVariation(project.root); if (path !== null) setNotice(`別案を作成しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.createVariation(project.root); if (path !== null) setNotice(`別案を作成しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
   }, [project, saveAllBuffers]);
 
   const updateProjectSettings = useCallback(async (patch: ProjectSettings): Promise<void> => {
     if (project === null) return;
-    try { setProject(await window.novelLens.updateSettings(project.root, patch)); }
+    try { setProject(await window.kohon.updateSettings(project.root, patch)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
   const resetProjectSetting = useCallback(async (key: "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width"): Promise<void> => {
     if (project === null) return;
-    try { setProject(await window.novelLens.resetProjectSetting(project.root, key)); }
+    try { setProject(await window.kohon.resetProjectSetting(project.root, key)); }
     catch (cause) { setError(errorText(cause)); throw cause; }
   }, [project]);
 
   const updateUserSettings = useCallback(async (patch: UserSettingsPatch): Promise<void> => {
     try {
-      const next = await window.novelLens.updateUserSettings(patch);
+      const next = await window.kohon.updateUserSettings(patch);
       setUserSettings(next);
       if (patch.ai?.defaultProvider !== undefined) setProvider(next.ai.defaultProvider);
       if (patch.ai?.codexModel !== undefined) setModelId(next.ai.codexModel);
@@ -1357,60 +1357,60 @@ export function App(): ReactNode {
   }, []);
 
   const refreshConnections = useCallback(async (): Promise<void> => {
-    try { setConnections(await window.novelLens.connectionStatus()); }
+    try { setConnections(await window.kohon.connectionStatus()); }
     catch (cause) { setError(errorText(cause)); }
   }, []);
 
   const connectOpenAI = useCallback(async (key: string): Promise<void> => {
-    try { setConnections(await window.novelLens.connectOpenAI(key)); }
+    try { setConnections(await window.kohon.connectOpenAI(key)); }
     catch (cause) { await refreshConnections(); throw cause; }
   }, [refreshConnections]);
 
   const disconnectOpenAI = useCallback(async (): Promise<void> => {
-    setConnections(await window.novelLens.disconnectOpenAI());
+    setConnections(await window.kohon.disconnectOpenAI());
   }, []);
 
   const loginCodex = useCallback(async (): Promise<void> => {
-    try { setConnections(await window.novelLens.loginCodex()); }
+    try { setConnections(await window.kohon.loginCodex()); }
     catch (cause) { await refreshConnections(); throw cause; }
   }, [refreshConnections]);
 
   const logoutCodex = useCallback(async (): Promise<void> => {
-    setConnections(await window.novelLens.logoutCodex());
+    setConnections(await window.kohon.logoutCodex());
   }, []);
 
   const refreshCodexModels = useCallback(async (): Promise<void> => {
-    setConnections(await window.novelLens.refreshCodexModels());
+    setConnections(await window.kohon.refreshCodexModels());
   }, []);
 
   const loginGitHub = useCallback(async (): Promise<void> => {
-    try { setConnections(await window.novelLens.loginGitHub()); }
+    try { setConnections(await window.kohon.loginGitHub()); }
     catch (cause) { await refreshConnections(); throw cause; }
   }, [refreshConnections]);
 
   const checkUpdates = useCallback(async (): Promise<void> => {
-    setUpdateStatus(await window.novelLens.checkForUpdates());
+    setUpdateStatus(await window.kohon.checkForUpdates());
   }, []);
 
   const resetKeybindings = useCallback(async (): Promise<void> => {
-    setUserSettings(await window.novelLens.resetKeybindings());
+    setUserSettings(await window.kohon.resetKeybindings());
   }, []);
 
   const openExternalPage = useCallback(async (page: "chatgpt" | "openai-api-keys" | "github-cli" | "github-applications" | "latest-release"): Promise<void> => {
-    try { await window.novelLens.openExternalPage(page); }
+    try { await window.kohon.openExternalPage(page); }
     catch (cause) { setError(errorText(cause)); }
   }, []);
 
   const installUpdate = useCallback(async (): Promise<void> => {
     try {
       await saveAllBuffers();
-      setUpdateStatus(await window.novelLens.installUpdate());
+      setUpdateStatus(await window.kohon.installUpdate());
     }
     catch (cause) { setError(errorText(cause)); }
   }, [saveAllBuffers]);
 
   const openUpdatePage = useCallback(async (): Promise<void> => {
-    try { await window.novelLens.openUpdatePage(); }
+    try { await window.kohon.openUpdatePage(); }
     catch (cause) { setError(errorText(cause)); }
   }, []);
 
@@ -1423,11 +1423,11 @@ export function App(): ReactNode {
       await saveAllBuffers();
       const userMessage: LensMessage = { sender: "author", text: query, createdAt: new Date().toISOString() };
       const conversation = [...threads[role], userMessage];
-      const result = await window.novelLens.runLens({ root: project.root, role, query, scope: scopeMode, cutoffChapterId: scopeMode === "all" ? null : activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
+      const result = await window.kohon.runLens({ root: project.root, role, query, scope: scopeMode, cutoffChapterId: scopeMode === "all" ? null : activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
       setLensResult(result);
       if (result.ledgerStored === false) setError(`AIの回答は表示できますが、指摘台帳へ保存できませんでした。${result.ledgerMessage ?? ""}`);
       else {
-        try { setReviewFindings(await window.novelLens.listReviewFindings(project.root)); }
+        try { setReviewFindings(await window.kohon.listReviewFindings(project.root)); }
         catch (cause) { setError(`AIの回答は表示できますが、指摘台帳を読み込めませんでした。${errorText(cause)}`); }
       }
       const responseText = [result.summary, ...result.findings.map((finding) => `・${finding.title}: ${finding.observation}`)].join("\n");
@@ -1451,18 +1451,18 @@ export function App(): ReactNode {
     if (project === null || saveState !== "saved") return;
     const lensSlot = slotOf(userSettings.layout, "lens");
     if (lensSlot === null || userSettings.layout.zenMode || !userSettings.layout.slots[lensSlot].visible || userSettings.layout.slots[lensSlot].activeView !== "lens") return;
-    void window.novelLens.listReviewFindings(project.root).then(setReviewFindings).catch((cause) => setError(errorText(cause)));
+    void window.kohon.listReviewFindings(project.root).then(setReviewFindings).catch((cause) => setError(errorText(cause)));
   }, [activeBuffer?.version, project, saveState, userSettings.layout]);
 
   const updateReviewStatus = useCallback(async (id: string, status: ReviewStatus): Promise<void> => {
     if (project === null) return;
-    try { setReviewFindings(await window.novelLens.setReviewFindingStatus(project.root, id, status)); }
+    try { setReviewFindings(await window.kohon.setReviewFindingStatus(project.root, id, status)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
   const recheckReview = useCallback(async (id: string): Promise<void> => {
     if (project === null) return;
-    try { setReviewFindings(await window.novelLens.recheckReviewFinding(project.root, id)); }
+    try { setReviewFindings(await window.kohon.recheckReviewFinding(project.root, id)); }
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
@@ -1576,15 +1576,15 @@ export function App(): ReactNode {
     else if (mode === "chapters") void loadChapter(item.id);
   }, [executeCommand, loadChapter, quickAccessMode]);
 
-  useEffect(() => window.novelLens.onMenuAction(executeCommand), [executeCommand]);
+  useEffect(() => window.kohon.onMenuAction(executeCommand), [executeCommand]);
 
   const flushBeforeClose = useCallback(async (): Promise<void> => {
     if (project !== null) {
       const captured = captureEditorView();
-      await window.novelLens.writeEditorSession(project.root, captured);
+      await window.kohon.writeEditorSession(project.root, captured);
       const buffers = Object.values(editorBuffersRef.current.buffers);
       for (const buffer of buffers) {
-        if (buffer.text !== buffer.savedText && buffer.version.length > 0) await window.novelLens.writeRecoveryDraft(project.root, currentDraftInput(buffer.chapter.id, buffer.text, buffer.version));
+        if (buffer.text !== buffer.savedText && buffer.version.length > 0) await window.kohon.writeRecoveryDraft(project.root, currentDraftInput(buffer.chapter.id, buffer.text, buffer.version));
       }
       await Promise.all([saveActiveNote(), ...buffers.map((buffer) => saveChapterBuffer(buffer.chapter.id))]);
     }
@@ -1592,7 +1592,7 @@ export function App(): ReactNode {
     await noteSaveQueueRef.current;
   }, [captureEditorView, currentDraftInput, project, saveActiveNote, saveChapterBuffer]);
 
-  useEffect(() => window.novelLens.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
+  useEffect(() => window.kohon.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
 
   const layout = userSettings.layout;
   const slotVisible = (slot: SlotId): boolean => !layout.zenMode && layout.slots[slot].visible && layout.slots[slot].views.length > 0;

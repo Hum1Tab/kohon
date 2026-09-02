@@ -104,7 +104,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
 
   useEffect(() => { setModelDraft(props.settings.ai.openaiModel); }, [props.settings.ai.openaiModel]);
   useEffect(() => { void props.onRefreshConnections(); }, []);
-  useEffect(() => () => { void window.novelLens.setKeybindingRecording(false); }, []);
+  useEffect(() => () => { void window.kohon.setKeybindingRecording(false); }, []);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => { if (event.key === "Escape" && recording === null) props.onClose(); };
     window.addEventListener("keydown", closeOnEscape);
@@ -142,11 +142,11 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
   const customContrast = contrastRatio(customPalette.background, customPalette.text);
 
   const beginRecording = (command: AppCommandId): void => {
-    setRecording(command); setError(null); void window.novelLens.setKeybindingRecording(true);
+    setRecording(command); setError(null); void window.kohon.setKeybindingRecording(true);
   };
 
   const finishRecording = (): void => {
-    setRecording(null); void window.novelLens.setKeybindingRecording(false);
+    setRecording(null); void window.kohon.setKeybindingRecording(false);
   };
 
   const recordKey = (event: ReactKeyboardEvent<HTMLButtonElement>, command: AppCommandId): void => {

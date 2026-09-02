@@ -1,4 +1,4 @@
-import { getRole, ROLE_REGISTRY } from "@novel-lens/editor-core";
+import { getRole, ROLE_REGISTRY } from "@kohon/editor-core";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type {

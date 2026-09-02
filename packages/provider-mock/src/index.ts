@@ -1,7 +1,7 @@
-import type { LensOutput, ModelFinding } from "@novel-lens/contracts";
-import { SCHEMA_VERSION } from "@novel-lens/contracts";
-import type { LensProvider, ProviderCallOptions, ProviderRequest, ProviderResponse } from "@novel-lens/core";
-import { GateAError } from "@novel-lens/core";
+import type { LensOutput, ModelFinding } from "@kohon/contracts";
+import { SCHEMA_VERSION } from "@kohon/contracts";
+import type { LensProvider, ProviderCallOptions, ProviderRequest, ProviderResponse } from "@kohon/core";
+import { GateAError } from "@kohon/core";
 
 function firstUsableQuote(text: string): string {
   const paragraph = text

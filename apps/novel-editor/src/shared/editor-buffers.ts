@@ -1,4 +1,4 @@
-import type { Chapter } from "@novel-lens/project-store";
+import type { Chapter } from "@kohon/project-store";
 import type { RecoveryDraftResult } from "./types.js";
 
 /** The state of the canonical manuscript save for one open chapter. */

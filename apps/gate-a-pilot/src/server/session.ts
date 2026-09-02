@@ -7,9 +7,9 @@ import type {
   ProviderMetadata,
   ReaderCutoff,
   TokenUsage
-} from "@novel-lens/contracts";
-import { SCHEMA_VERSION } from "@novel-lens/contracts";
-import { readContractSchema, validateContract } from "@novel-lens/contracts/validator";
+} from "@kohon/contracts";
+import { SCHEMA_VERSION } from "@kohon/contracts";
+import { readContractSchema, validateContract } from "@kohon/contracts/validator";
 import {
   assertAnalysisQuery,
   assertProviderPayloadBoundary,
@@ -28,9 +28,9 @@ import {
   type ProviderResponse,
   type ScopedContext,
   type SealedAssignment
-} from "@novel-lens/core";
-import { MockProvider } from "@novel-lens/provider-mock";
-import { OpenAIProvider } from "@novel-lens/provider-openai";
+} from "@kohon/core";
+import { MockProvider } from "@kohon/provider-mock";
+import { OpenAIProvider } from "@kohon/provider-openai";
 
 const STUDY_ID = "gate-a-local-pilot";
 const STUDY_VERSION = "0.1.0";

@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/pr
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-import { LEGACY_PROJECT_MANIFEST, PROJECT_MANIFEST, ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
+import { LEGACY_PROJECT_MANIFEST, PROJECT_MANIFEST, ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@kohon/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";

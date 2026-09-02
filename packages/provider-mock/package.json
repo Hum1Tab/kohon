@@ -1,5 +1,5 @@
 {
-  "name": "@novel-lens/provider-mock",
+  "name": "@kohon/provider-mock",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
@@ -17,7 +17,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('tsconfig.tsbuildinfo',{force:true})\""
   },
   "dependencies": {
-    "@novel-lens/contracts": "workspace:*",
-    "@novel-lens/core": "workspace:*"
+    "@kohon/contracts": "workspace:*",
+    "@kohon/core": "workspace:*"
   }
 }

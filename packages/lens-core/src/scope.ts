@@ -1,4 +1,4 @@
-import type { ContextManifest, CorpusDocument, CorpusSnapshot, ReaderCutoff } from "@novel-lens/contracts";
+import type { ContextManifest, CorpusDocument, CorpusSnapshot, ReaderCutoff } from "@kohon/contracts";
 
 import { GateAError } from "./errors.js";
 

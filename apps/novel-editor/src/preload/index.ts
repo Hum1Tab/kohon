@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppCommandId, ConnectionStatus, NovelLensApi, UpdateStatus } from "../shared/types.js";
+import type { AppCommandId, ConnectionStatus, KohonApi, UpdateStatus } from "../shared/types.js";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(channel, ...args) as Promise<T>;
 
-const api: NovelLensApi = {
+const api: KohonApi = {
   appInfo: () => invoke("app:info"),
   getUserSettings: () => invoke("user-settings:get"),
   updateUserSettings: (patch) => invoke("user-settings:update", patch),
@@ -83,4 +83,4 @@ const api: NovelLensApi = {
   }
 };
 
-contextBridge.exposeInMainWorld("novelLens", Object.freeze(api));
+contextBridge.exposeInMainWorld("kohon", Object.freeze(api));

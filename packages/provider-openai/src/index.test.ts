@@ -1,5 +1,5 @@
-import { readContractSchema } from "@novel-lens/contracts/validator";
-import type { ProviderRequest } from "@novel-lens/core";
+import { readContractSchema } from "@kohon/contracts/validator";
+import type { ProviderRequest } from "@kohon/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OpenAIProvider } from "./index.js";

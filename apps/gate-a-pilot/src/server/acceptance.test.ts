@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { GateAError } from "@novel-lens/core";
+import { GateAError } from "@kohon/core";
 
 import { SessionManager, type RatingValues } from "./session.js";
 

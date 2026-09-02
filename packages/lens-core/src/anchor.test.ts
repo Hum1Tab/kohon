@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { SCHEMA_VERSION, type LensOutput } from "@novel-lens/contracts";
+import { SCHEMA_VERSION, type LensOutput } from "@kohon/contracts";
 import { describe, expect, it } from "vitest";
 
 import { resolveCrossVersionAnchor, validateEvidence } from "./anchor.js";

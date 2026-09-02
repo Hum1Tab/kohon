@@ -1,6 +1,6 @@
-import type { CorpusSnapshot, LensFinding, LensOutput, ModelFinding } from "@novel-lens/contracts";
-import { SCHEMA_VERSION } from "@novel-lens/contracts";
-import { validateContract } from "@novel-lens/contracts/validator";
+import type { CorpusSnapshot, LensFinding, LensOutput, ModelFinding } from "@kohon/contracts";
+import { SCHEMA_VERSION } from "@kohon/contracts";
+import { validateContract } from "@kohon/contracts/validator";
 
 import { stableId } from "./hash.js";
 import { validateEvidence } from "./anchor.js";

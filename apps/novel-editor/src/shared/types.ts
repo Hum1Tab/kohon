@@ -1,5 +1,5 @@
-import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
+import type { RoleId } from "@kohon/editor-core";
+import type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@kohon/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
@@ -183,7 +183,7 @@ export interface UpdateStatus {
   message: string;
 }
 
-export interface NovelLensApi {
+export interface KohonApi {
   appInfo(): Promise<AppInfo>;
   getUserSettings(): Promise<UserSettings>;
   updateUserSettings(patch: UserSettingsPatch): Promise<UserSettings>;
@@ -249,6 +249,6 @@ export interface NovelLensApi {
 
 declare global {
   interface Window {
-    novelLens: NovelLensApi;
+    kohon: KohonApi;
   }
 }

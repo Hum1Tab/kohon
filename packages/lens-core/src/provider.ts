@@ -1,4 +1,4 @@
-import type { LensId, LensOutput, MediaType, TokenUsage } from "@novel-lens/contracts";
+import type { LensId, LensOutput, MediaType, TokenUsage } from "@kohon/contracts";
 
 export interface ProviderInputDocument {
   document_id: string;

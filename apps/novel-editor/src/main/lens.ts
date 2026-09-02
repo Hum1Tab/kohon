@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { getRole, validateFinding } from "@novel-lens/editor-core";
+import { getRole, validateFinding } from "@kohon/editor-core";
 
 import type { LensChapterInput, LensFinding, LensRunInput, LensRunResult } from "../shared/types.js";
 

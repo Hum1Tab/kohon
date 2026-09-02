@@ -1,5 +1,5 @@
 {
-  "name": "novel-lens",
+  "name": "kohon",
   "version": "0.4.0",
   "private": true,
   "license": "Apache-2.0",
@@ -15,16 +15,16 @@
     "clean": "pnpm -r run clean",
     "dev": "pnpm desktop:dev",
     "start": "pnpm desktop",
-    "desktop": "pnpm --filter @novel-lens/desktop start",
-    "desktop:dev": "pnpm --filter @novel-lens/editor-core build && pnpm --filter @novel-lens/project-store build && pnpm --filter @novel-lens/desktop dev",
+    "desktop": "pnpm --filter @kohon/desktop start",
+    "desktop:dev": "pnpm --filter @kohon/editor-core build && pnpm --filter @kohon/project-store build && pnpm --filter @kohon/desktop dev",
     "desktop:dist": "node scripts/desktop-dist.mjs",
-    "pilot:dev": "pnpm -r --workspace-concurrency=1 --filter './packages/*' build && pnpm --filter @novel-lens/gate-a-pilot dev",
-    "pilot:start": "pnpm --filter @novel-lens/gate-a-pilot start",
+    "pilot:dev": "pnpm -r --workspace-concurrency=1 --filter './packages/*' build && pnpm --filter @kohon/gate-a-pilot dev",
+    "pilot:start": "pnpm --filter @kohon/gate-a-pilot start",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "benchmark:editor": "tsx scripts/benchmark-editor-input.ts",
-    "typecheck": "tsc -b --pretty false && pnpm --filter @novel-lens/desktop typecheck"
+    "typecheck": "tsc -b --pretty false && pnpm --filter @kohon/desktop typecheck"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

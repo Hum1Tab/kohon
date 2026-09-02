@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { GateAError } from "@novel-lens/core";
+import { GateAError } from "@kohon/core";
 
 import { SessionManager, type ConsentInput, type ImportFileInput, type PrepareInput, type RatingInput } from "./session.js";
 

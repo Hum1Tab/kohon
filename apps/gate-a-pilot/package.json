@@ -1,5 +1,5 @@
 {
-  "name": "@novel-lens/gate-a-pilot",
+  "name": "@kohon/gate-a-pilot",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
@@ -12,10 +12,10 @@
     "start": "node dist-server/server/index.js"
   },
   "dependencies": {
-    "@novel-lens/contracts": "workspace:*",
-    "@novel-lens/core": "workspace:*",
-    "@novel-lens/provider-mock": "workspace:*",
-    "@novel-lens/provider-openai": "workspace:*",
+    "@kohon/contracts": "workspace:*",
+    "@kohon/core": "workspace:*",
+    "@kohon/provider-mock": "workspace:*",
+    "@kohon/provider-openai": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

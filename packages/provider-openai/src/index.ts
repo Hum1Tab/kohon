@@ -1,7 +1,7 @@
-import type { LensOutput } from "@novel-lens/contracts";
-import { validateContract } from "@novel-lens/contracts/validator";
-import type { LensProvider, ProviderCallOptions, ProviderRequest, ProviderResponse } from "@novel-lens/core";
-import { GateAError, serializeDocumentsForProvider } from "@novel-lens/core";
+import type { LensOutput } from "@kohon/contracts";
+import { validateContract } from "@kohon/contracts/validator";
+import type { LensProvider, ProviderCallOptions, ProviderRequest, ProviderResponse } from "@kohon/core";
+import { GateAError, serializeDocumentsForProvider } from "@kohon/core";
 
 interface OpenAIResponseBody {
   id?: unknown;

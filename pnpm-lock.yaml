@@ -26,16 +26,16 @@ importers:
 
   apps/gate-a-pilot:
     dependencies:
-      '@novel-lens/contracts':
+      '@kohon/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@novel-lens/core':
+      '@kohon/core':
         specifier: workspace:*
         version: link:../../packages/lens-core
-      '@novel-lens/provider-mock':
+      '@kohon/provider-mock':
         specifier: workspace:*
         version: link:../../packages/provider-mock
-      '@novel-lens/provider-openai':
+      '@kohon/provider-openai':
         specifier: workspace:*
         version: link:../../packages/provider-openai
       react:
@@ -60,10 +60,10 @@ importers:
 
   apps/novel-editor:
     dependencies:
-      '@novel-lens/editor-core':
+      '@kohon/editor-core':
         specifier: workspace:*
         version: link:../../packages/editor-core
-      '@novel-lens/project-store':
+      '@kohon/project-store':
         specifier: workspace:*
         version: link:../../packages/project-store
       '@openai/codex':
@@ -116,7 +116,7 @@ importers:
 
   packages/lens-core:
     dependencies:
-      '@novel-lens/contracts':
+      '@kohon/contracts':
         specifier: workspace:*
         version: link:../contracts
       json-canonicalize:
@@ -127,19 +127,19 @@ importers:
 
   packages/provider-mock:
     dependencies:
-      '@novel-lens/contracts':
+      '@kohon/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@novel-lens/core':
+      '@kohon/core':
         specifier: workspace:*
         version: link:../lens-core
 
   packages/provider-openai:
     dependencies:
-      '@novel-lens/contracts':
+      '@kohon/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@novel-lens/core':
+      '@kohon/core':
         specifier: workspace:*
         version: link:../lens-core
 

@@ -1,4 +1,4 @@
-import type { CorpusDocument, LensId } from "@novel-lens/contracts";
+import type { CorpusDocument, LensId } from "@kohon/contracts";
 
 import { GateAError } from "./errors.js";
 
