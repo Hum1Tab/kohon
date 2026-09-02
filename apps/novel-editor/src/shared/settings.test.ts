@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest";
 import { bindingFromKeyboardEvent, defaultUserSettings, mergeUserSettings, normalizeKeybinding, sanitizeUserSettings, serializeUserSettings, validateKeybindings } from "./settings.js";
 
 describe("desktop user settings", () => {
+  it("keeps workbench modes separate and validates custom manuscript colors", () => {
+    expect(defaultUserSettings().appearance.colorTheme).toBe("default");
+    const settings = sanitizeUserSettings({ appearance: { colorTheme: "light" }, editor: { theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" } });
+    expect(settings.appearance.colorTheme).toBe("light");
+    expect(settings.editor).toMatchObject({ theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" });
+    expect(sanitizeUserSettings({ editor: { theme: "custom", canvasBackground: "red" } }).editor.canvasBackground).toBe("#fffefa");
+  });
+
   it("keeps editable keybindings portable, unique, and away from editor-reserved keys", () => {
     const settings = defaultUserSettings();
     expect(normalizeKeybinding("Ctrl+Shift+l")).toBe("Mod+Shift+L");

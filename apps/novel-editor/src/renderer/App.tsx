@@ -1,6 +1,7 @@
 import { getRole, ROLE_REGISTRY, textStats } from "@novel-lens/editor-core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
+import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
 import {
   defaultLayout,
   defaultUserSettings,
@@ -34,6 +35,7 @@ import type {
   SearchHit,
   UpdateStatus
 } from "../shared/types.js";
+import { defaultChapterTitle } from "../shared/chapter-title.js";
 import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
 
@@ -65,6 +67,7 @@ const VIEW_LABELS: Record<ViewId, string> = {
   search: "作品内検索",
   history: "履歴"
 };
+const MANUSCRIPT_THEME_LABELS: Record<ManuscriptTheme, string> = { paper: "白い紙", sepia: "生成り", gray: "グレー", dark: "黒", custom: "カスタム" };
 
 function applyDropTarget(layout: LayoutPreferences, view: ViewId, target: DropTarget): LayoutPreferences {
   if (target.kind === "reject") return layout;
@@ -115,7 +118,7 @@ function settingNumber(settings: ProjectSettings, key: string, fallback: number)
 export function App(): ReactNode {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [userSettings, setUserSettings] = useState(defaultUserSettings);
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("general");
@@ -267,10 +270,24 @@ export function App(): ReactNode {
   const editorWidth = settingNumber(settings, "width", userSettings.editor.width);
   const editorLineHeight = settingNumber(settings, "lineHeight", userSettings.editor.lineHeight);
   const editorFontSize = settingNumber(settings, "fontSize", userSettings.editor.fontSize);
-  const theme = settings["theme"] === "dark" || settings["theme"] === "sepia" || settings["theme"] === "paper" ? settings["theme"] : userSettings.editor.theme;
+  const theme: ManuscriptTheme = settings["theme"] === "custom" || settings["theme"] === "gray" || settings["theme"] === "dark" || settings["theme"] === "sepia" || settings["theme"] === "paper" ? settings["theme"] : userSettings.editor.theme;
+  const canvasBackground = isHexColor(settings["canvasBackground"]) ? settings["canvasBackground"] : userSettings.editor.canvasBackground;
+  const canvasText = settings["canvasText"] === null || isHexColor(settings["canvasText"]) ? settings["canvasText"] : userSettings.editor.canvasText;
+  const manuscriptPalette = resolveManuscriptPalette(theme, canvasBackground, canvasText);
   const stats = useMemo(() => textStats(text), [text]);
-  const colorTheme = userSettings.appearance.colorTheme === "system" ? (systemDark ? "dark" : "light") : userSettings.appearance.colorTheme;
+  const colorTheme = userSettings.appearance.colorTheme === "system" ? (systemDark ? "dark" : "default") : userSettings.appearance.colorTheme;
   const shellClass = `app-shell ui-${colorTheme} accent-${userSettings.appearance.accent} density-${userSettings.appearance.density}`;
+
+  useEffect(() => {
+    if (writingMode !== "vertical-rl") return;
+    const frame = window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (editor === null) return;
+      editor.scrollLeft = editor.scrollWidth;
+      if (editor.parentElement !== null) editor.parentElement.scrollLeft = editor.parentElement.scrollWidth;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeChapterId, editorWidth, viewport.width, writingMode]);
 
   const scopeChapters = useMemo(() => {
     if (activeIndex < 0) return [];
@@ -388,7 +405,7 @@ export function App(): ReactNode {
     const title = await requestText({
       title: "章・場面を追加",
       label: "タイトル",
-      initialValue: `第${manifestChapters.length + 1}章`,
+      initialValue: defaultChapterTitle(manifestChapters.length + 1),
       confirmLabel: "追加する"
     });
     if (title === null || title.trim().length === 0) return;
@@ -520,7 +537,7 @@ export function App(): ReactNode {
     catch (cause) { setError(errorText(cause)); }
   }, [project]);
 
-  const resetProjectSetting = useCallback(async (key: "writingMode" | "theme" | "font" | "fontSize" | "lineHeight" | "width"): Promise<void> => {
+  const resetProjectSetting = useCallback(async (key: "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width"): Promise<void> => {
     if (project === null) return;
     try { setProject(await window.novelLens.resetProjectSetting(project.root, key)); }
     catch (cause) { setError(errorText(cause)); throw cause; }
@@ -537,7 +554,7 @@ export function App(): ReactNode {
   }, []);
 
   const toggleColorTheme = useCallback((): void => {
-    void updateUserSettings({ appearance: { colorTheme: colorTheme === "dark" ? "light" : "dark" } });
+    void updateUserSettings({ appearance: { colorTheme: colorTheme === "dark" ? "default" : "dark" } });
   }, [colorTheme, updateUserSettings]);
 
   const commitLayout = useCallback((layout: LayoutPreferences, announcement?: string): void => {
@@ -1068,7 +1085,7 @@ export function App(): ReactNode {
       {renderSlot("primary")}
       {renderSlot("secondary")}
 
-      <main data-editor-pane className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"}`} style={{ gridColumn: columnFor("editor"), gridRow: 1 }}>
+      <main data-editor-pane className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"}`} style={{ gridColumn: columnFor("editor"), gridRow: 1, "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}>
         <div className="editor-toolbar">
           <div><span className="eyebrow">{writingMode === "vertical-rl" ? "VERTICAL WRITING" : "WRITING"}</span><h1>{chapter?.chapter.title ?? "章を選択"}</h1></div>
           <div className="editor-actions"><details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={activeIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={activeIndex < 0 || activeIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章を削除</button></div></details></div>
@@ -1087,7 +1104,7 @@ export function App(): ReactNode {
             placeholder="ここから物語を書き始めます。"
           />
         </div>
-        <footer className="statusbar"><span>{stats.charactersNoWhitespace.toLocaleString()}字</span><span>{stats.lines.toLocaleString()}行</span><span>{stats.words.toLocaleString()}語</span><span>{writingMode === "vertical-rl" ? "縦書き" : "横書き"}</span></footer>
+        <footer className="statusbar"><span>{stats.charactersNoWhitespace.toLocaleString()}字</span><span>{stats.lines.toLocaleString()}行</span><span>{stats.words.toLocaleString()}語</span><select aria-label="原稿の配色" value={theme} onChange={(event) => void updateProjectSettings({ theme: event.target.value as ManuscriptTheme })}>{Object.entries(MANUSCRIPT_THEME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button onClick={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} title="横書きと縦書きを切り替える">{writingMode === "vertical-rl" ? "縦書き" : "横書き"}</button></footer>
       </main>
 
       {renderSlot("bottom")}
@@ -1153,7 +1170,7 @@ function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromptReques
   </div>;
 }
 
-function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, onOpen, onSettings }: { appInfo: AppInfo | null; busy: boolean; error: string | null; colorTheme: "light" | "dark"; onToggleTheme: () => void; onCreate: () => void; onOpen: () => void; onSettings: () => void }): ReactNode {
+function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, onOpen, onSettings }: { appInfo: AppInfo | null; busy: boolean; error: string | null; colorTheme: "default" | "light" | "dark"; onToggleTheme: () => void; onCreate: () => void; onOpen: () => void; onSettings: () => void }): ReactNode {
   return <main className="welcome">
     <header className="welcome-header">
       <div className="welcome-brand"><AppIcon name="logo" size={30} tile /><span><b>Novel Lens</b><small>Writing workspace</small></span></div>

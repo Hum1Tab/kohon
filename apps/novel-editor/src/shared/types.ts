@@ -157,7 +157,7 @@ export interface NovelLensApi {
   renameProject(root: string, title: string): Promise<ProjectSummary>;
   deleteChapter(root: string, chapterId: string): Promise<void>;
   updateSettings(root: string, settings: ProjectSettings): Promise<ProjectSummary>;
-  resetProjectSetting(root: string, key: "writingMode" | "theme" | "font" | "fontSize" | "lineHeight" | "width"): Promise<ProjectSummary>;
+  resetProjectSetting(root: string, key: "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width"): Promise<ProjectSummary>;
   search(root: string, query: string): Promise<SearchHit[]>;
   createCheckpoint(root: string, subject: string): Promise<{ created: boolean; commit: string | null }>;
   listCheckpoints(root: string): Promise<CheckpointEntry[]>;

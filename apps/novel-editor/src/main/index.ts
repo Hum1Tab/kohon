@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { ProjectStore, type ProjectSettings } from "@novel-lens/project-store";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
 
+import { isHexColor } from "../shared/editor-theme.js";
 import { COMMAND_DEFINITIONS, defaultUserSettings, toElectronAccelerator, type AppCommandId, type UserSettings } from "../shared/settings.js";
 import { runLens, type LensExecutionInput } from "./lens.js";
 import type { ChapterDocument, LensRunInput, ProjectSummary } from "../shared/types.js";
@@ -35,6 +36,12 @@ const EXTERNAL_PAGES = {
   "github-applications": "https://github.com/settings/applications",
   "latest-release": LATEST_RELEASE_PAGE
 } as const;
+
+function workbenchBackgroundColor(): string {
+  const theme = userSettings.appearance.colorTheme;
+  if (theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors)) return "#181818";
+  return theme === "light" ? "#ffffff" : "#eee9df";
+}
 
 function suggestedFolderName(title: string): string {
   return title.replace(/[<>:"/\\|?*\u0000-\u001F]/gu, "-").replace(/[. ]+$/u, "").trim() || "新しい小説";
@@ -133,8 +140,7 @@ function registerIpc(): void {
   handle("user-settings:update", async (patch) => {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) throw new Error("ユーザー設定を確認してください。");
     userSettings = await requireSettingsStore().update(patch);
-    const dark = userSettings.appearance.colorTheme === "dark" || (userSettings.appearance.colorTheme === "system" && nativeTheme.shouldUseDarkColors);
-    mainWindow?.setBackgroundColor(dark ? "#15201c" : "#eee9df");
+    mainWindow?.setBackgroundColor(workbenchBackgroundColor());
     installMenu();
     return userSettings;
   });
@@ -221,16 +227,18 @@ function registerIpc(): void {
     if (typeof source["width"] === "number" && source["width"] >= 480 && source["width"] <= 1600) safeSettings.width = source["width"];
     if (typeof source["lineHeight"] === "number" && source["lineHeight"] >= 1.2 && source["lineHeight"] <= 3) safeSettings.lineHeight = source["lineHeight"];
     if (typeof source["fontSize"] === "number" && source["fontSize"] >= 12 && source["fontSize"] <= 36) safeSettings["fontSize"] = source["fontSize"];
-    if (source["theme"] === "paper" || source["theme"] === "dark" || source["theme"] === "sepia") safeSettings["theme"] = source["theme"];
+    if (source["theme"] === "paper" || source["theme"] === "sepia" || source["theme"] === "gray" || source["theme"] === "dark" || source["theme"] === "custom") safeSettings["theme"] = source["theme"];
+    if (isHexColor(source["canvasBackground"])) safeSettings["canvasBackground"] = source["canvasBackground"].toLowerCase();
+    if (source["canvasText"] === null || isHexColor(source["canvasText"])) safeSettings["canvasText"] = typeof source["canvasText"] === "string" ? source["canvasText"].toLowerCase() : null;
     const store = await storeFor(root);
     await store.updateSettings(safeSettings);
     return summary(store);
   });
   handle("project:settings-reset", async (root, key) => {
-    const allowed = new Set(["writingMode", "theme", "font", "fontSize", "lineHeight", "width"]);
+    const allowed = new Set(["writingMode", "theme", "canvasBackground", "canvasText", "font", "fontSize", "lineHeight", "width"]);
     if (typeof key !== "string" || !allowed.has(key)) throw new Error("設定項目を確認してください。");
     const store = await storeFor(root);
-    await store.resetSetting(key as "writingMode" | "theme" | "font" | "fontSize" | "lineHeight" | "width");
+    await store.resetSetting(key as "writingMode" | "theme" | "canvasBackground" | "canvasText" | "font" | "fontSize" | "lineHeight" | "width");
     return summary(store);
   });
   handle("project:search", async (root, query) => {
@@ -370,13 +378,12 @@ function installMenu(): void {
 
 async function createWindow(): Promise<void> {
   closeApproved = false;
-  const dark = userSettings.appearance.colorTheme === "dark" || (userSettings.appearance.colorTheme === "system" && nativeTheme.shouldUseDarkColors);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 980,
     minHeight: 680,
-    backgroundColor: dark ? "#15201c" : "#eee9df",
+    backgroundColor: workbenchBackgroundColor(),
     title: "Novel Lens",
     show: false,
     webPreferences: {
@@ -416,6 +423,7 @@ else {
     session.defaultSession.setPermissionCheckHandler(() => false);
     settingsStore = new UserSettingsStore(join(app.getPath("userData"), "settings.json"));
     userSettings = await settingsStore.load();
+    nativeTheme.on("updated", () => { if (userSettings.appearance.colorTheme === "system") mainWindow?.setBackgroundColor(workbenchBackgroundColor()); });
     updateManager = new UpdateManager(app.getVersion(), process.platform, process.arch, (status) => mainWindow?.webContents.send("updates:status", status), join(app.getPath("temp"), "Novel-Lens-updates"));
     await connections.initializeOpenAI(new SecureCredentialStore(join(app.getPath("userData"), "openai-credential.bin")));
     connections.initializeCodex(app.getVersion(), join(app.getPath("temp"), "Novel-Lens-Codex"));

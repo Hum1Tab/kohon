@@ -7,6 +7,7 @@ import {
   type LayoutPatch,
   type LayoutPreferences
 } from "./layout.js";
+import { isHexColor, MANUSCRIPT_PALETTES, type ManuscriptTheme } from "./editor-theme.js";
 
 export { defaultLayout, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, LAYOUT_LIMITS, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, placeViewOnSide, projectLayoutV1, sanitizeLayout, sideOf, slotOf, TOOL_VIEWS, VIEW_IDS } from "./layout.js";
 export type { BottomPanelAlignment, DockSlotState, LayoutPatch, LayoutPreferences, PhysicalSide, SlotId, ViewId } from "./layout.js";
@@ -67,7 +68,9 @@ export type KeybindingMap = Record<AppCommandId, string>;
 
 export interface EditorPreferences {
   writingMode: "horizontal" | "vertical-rl";
-  theme: "paper" | "sepia" | "dark";
+  theme: ManuscriptTheme;
+  canvasBackground: string;
+  canvasText: string | null;
   font: string;
   fontSize: number;
   lineHeight: number;
@@ -75,7 +78,7 @@ export interface EditorPreferences {
 }
 
 export interface AppearancePreferences {
-  colorTheme: "system" | "light" | "dark";
+  colorTheme: "system" | "default" | "light" | "dark";
   accent: "forest" | "gold" | "ink";
   density: "comfortable" | "compact";
 }
@@ -112,9 +115,9 @@ export function defaultUserSettings(): UserSettings {
   return {
     schemaVersion: 2,
     general: { autoSaveDelayMs: 800 },
-    appearance: { colorTheme: "light", accent: "forest", density: "comfortable" },
+    appearance: { colorTheme: "default", accent: "forest", density: "comfortable" },
     layout: defaultLayout(),
-    editor: { writingMode: "horizontal", theme: "paper", font: DEFAULT_FONT, fontSize: 18, lineHeight: 2, width: 760 },
+    editor: { writingMode: "horizontal", theme: "paper", canvasBackground: MANUSCRIPT_PALETTES.paper.background, canvasText: null, font: DEFAULT_FONT, fontSize: 18, lineHeight: 2, width: 760 },
     ai: { defaultProvider: "codex", codexModel: "gpt-5.6-luna", openaiModel: "gpt-5.6-luna" },
     updates: { checkOnStartup: true },
     keybindings: defaultKeybindings()
@@ -193,7 +196,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
     schemaVersion: 2,
     general: { autoSaveDelayMs: finiteNumber(general["autoSaveDelayMs"], defaults.general.autoSaveDelayMs, 250, 5000) },
     appearance: {
-      colorTheme: appearance["colorTheme"] === "light" || appearance["colorTheme"] === "dark" || appearance["colorTheme"] === "system" ? appearance["colorTheme"] : defaults.appearance.colorTheme,
+      colorTheme: appearance["colorTheme"] === "default" || appearance["colorTheme"] === "light" || appearance["colorTheme"] === "dark" || appearance["colorTheme"] === "system" ? appearance["colorTheme"] : defaults.appearance.colorTheme,
       accent: appearance["accent"] === "forest" || appearance["accent"] === "gold" || appearance["accent"] === "ink"
         ? appearance["accent"]
         : appearance["accent"] === "amber" ? "gold" : appearance["accent"] === "blue" ? "ink" : appearance["accent"] === "violet" ? "forest" : defaults.appearance.accent,
@@ -202,7 +205,9 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
     layout: isV2Layout ? sanitizeLayout(layout) : migrateLayoutV1(layout),
     editor: {
       writingMode: editor["writingMode"] === "vertical-rl" ? "vertical-rl" : editor["writingMode"] === "horizontal" ? "horizontal" : defaults.editor.writingMode,
-      theme: editor["theme"] === "dark" || editor["theme"] === "sepia" || editor["theme"] === "paper" ? editor["theme"] : defaults.editor.theme,
+      theme: editor["theme"] === "custom" || editor["theme"] === "gray" || editor["theme"] === "dark" || editor["theme"] === "sepia" || editor["theme"] === "paper" ? editor["theme"] : defaults.editor.theme,
+      canvasBackground: isHexColor(editor["canvasBackground"]) ? editor["canvasBackground"].toLowerCase() : defaults.editor.canvasBackground,
+      canvasText: editor["canvasText"] === null || isHexColor(editor["canvasText"]) ? editor["canvasText"]?.toLowerCase() ?? null : defaults.editor.canvasText,
       font: typeof editor["font"] === "string" && editor["font"].length <= 200 ? editor["font"] : defaults.editor.font,
       fontSize: finiteNumber(editor["fontSize"], defaults.editor.fontSize, 12, 36),
       lineHeight: finiteNumber(editor["lineHeight"], defaults.editor.lineHeight, 1.2, 3),

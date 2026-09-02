@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
+import { automaticTextColor, contrastRatio, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
 import { AppIcon, type IconName } from "./AppIcon.js";
 
 import {
@@ -135,6 +136,9 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
     return props.settings.editor[key];
   };
 
+  const customPalette = resolveManuscriptPalette("custom", editorValue("canvasBackground"), editorValue("canvasText"));
+  const customContrast = contrastRatio(customPalette.background, customPalette.text);
+
   const beginRecording = (command: AppCommandId): void => {
     setRecording(command); setError(null); void window.novelLens.setKeybindingRecording(true);
   };
@@ -166,9 +170,18 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
     <SettingRow title="組方向" description="本文を横書きまたは日本語の縦書きで表示します。" inherited={scope === "workspace" && projectValue(props.project, "writingMode") === undefined} onReset={scope === "workspace" && projectValue(props.project, "writingMode") !== undefined ? () => props.onResetProjectSetting("writingMode") : undefined}>
       <select value={editorValue("writingMode")} onChange={(event) => void setEditor("writingMode", event.target.value as EditorPreferences["writingMode"])}><option value="horizontal">横書き</option><option value="vertical-rl">縦書き</option></select>
     </SettingRow>
-    <SettingRow title="カラーテーマ" description="執筆画面の色だけを変え、原稿には記録しません。" inherited={scope === "workspace" && projectValue(props.project, "theme") === undefined} onReset={scope === "workspace" && projectValue(props.project, "theme") !== undefined ? () => props.onResetProjectSetting("theme") : undefined}>
-      <select value={editorValue("theme")} onChange={(event) => void setEditor("theme", event.target.value as EditorPreferences["theme"])}><option value="paper">紙</option><option value="sepia">セピア</option><option value="dark">夜</option></select>
+    <SettingRow title="原稿の配色" description="背景と文字を読みやすい組み合わせで切り替えます。原稿本文には記録しません。" inherited={scope === "workspace" && projectValue(props.project, "theme") === undefined} onReset={scope === "workspace" && projectValue(props.project, "theme") !== undefined ? () => props.onResetProjectSetting("theme") : undefined}>
+      <select value={editorValue("theme")} onChange={(event) => void setEditor("theme", event.target.value as ManuscriptTheme)}><option value="paper">白い紙</option><option value="sepia">生成り</option><option value="gray">グレー</option><option value="dark">黒</option><option value="custom">カスタム</option></select>
     </SettingRow>
+    {editorValue("theme") === "custom" && <>
+      <SettingRow title="原稿の背景色" description={customPalette.background} inherited={scope === "workspace" && projectValue(props.project, "canvasBackground") === undefined} onReset={scope === "workspace" && projectValue(props.project, "canvasBackground") !== undefined ? () => props.onResetProjectSetting("canvasBackground") : undefined}>
+        <input aria-label="原稿の背景色" type="color" value={editorValue("canvasBackground")} onChange={(event) => void setEditor("canvasBackground", event.target.value)} />
+      </SettingRow>
+      <SettingRow title="本文の文字色" description={editorValue("canvasText") === null ? `背景に合わせて自動（${customPalette.text}）` : `${customPalette.text} · コントラスト ${customContrast.toFixed(1)}:1`} inherited={scope === "workspace" && projectValue(props.project, "canvasText") === undefined} onReset={scope === "workspace" && projectValue(props.project, "canvasText") !== undefined ? () => props.onResetProjectSetting("canvasText") : undefined}>
+        <div className="color-setting"><label className="toggle"><input type="checkbox" checked={editorValue("canvasText") === null} onChange={(event) => void setEditor("canvasText", event.target.checked ? null : automaticTextColor(editorValue("canvasBackground")))} />自動</label><input aria-label="本文の文字色" type="color" disabled={editorValue("canvasText") === null} value={customPalette.text} onChange={(event) => void setEditor("canvasText", event.target.value)} /></div>
+      </SettingRow>
+      <div className="manuscript-color-preview" style={{ color: customPalette.text, background: customPalette.background, borderColor: customPalette.line }}><span>原稿プレビュー</span><p>雨は、古い図書館の窓を静かに叩いていた。</p>{customContrast < 4.5 && <strong>文字が読みにくい配色です。自動をおすすめします。</strong>}</div>
+    </>}
     <SettingRow title="本文フォント" description="端末にあるフォントだけを使用します。" inherited={scope === "workspace" && projectValue(props.project, "font") === undefined} onReset={scope === "workspace" && projectValue(props.project, "font") !== undefined ? () => props.onResetProjectSetting("font") : undefined}>
       <select value={editorValue("font")} onChange={(event) => void setEditor("font", event.target.value)}><option value={'"Yu Mincho", "Hiragino Mincho ProN", serif'}>明朝体</option><option value={'"Yu Gothic UI", "Hiragino Sans", sans-serif'}>ゴシック体</option><option value={'ui-monospace, "BIZ UDゴシック", monospace'}>等幅</option></select>
     </SettingRow>
@@ -213,7 +226,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
           <SettingRow title="設定の保存場所" description="ユーザー設定はOSのNovel Lens設定フォルダーに保存します。APIキーとGitHub tokenは含みません。"><StatusBadge state="ok">ローカルのみ</StatusBadge></SettingRow>
         </SettingsSection>}
         {props.category === "appearance" && <SettingsSection eyebrow="APPEARANCE" title="外観" lead="作業UIの色と表示密度を設定します。原稿キャンバスの紙色はエディター設定で独立して選べます。">
-          <SettingRow title="カラーテーマ" description="トップバー、パネル、設定、ダイアログをライトまたはダークで統一します。"><select value={props.settings.appearance.colorTheme} onChange={(event) => void props.onUpdateUser({ appearance: { colorTheme: event.target.value as "system" | "light" | "dark" } })}><option value="system">システムに合わせる</option><option value="light">ライト</option><option value="dark">ダーク</option></select></SettingRow>
+          <SettingRow title="カラーテーマ" description="ブランド既定、純白、VS Code風の黒を明確に分けます。"><select value={props.settings.appearance.colorTheme} onChange={(event) => void props.onUpdateUser({ appearance: { colorTheme: event.target.value as "system" | "default" | "light" | "dark" } })}><option value="default">既定（森と紙）</option><option value="light">ホワイト</option><option value="dark">ダーク</option><option value="system">OSに合わせる</option></select></SettingRow>
           <SettingRow title="アクセントカラー" description="アイコン由来の森・金・インクから選びます。"><select value={props.settings.appearance.accent} onChange={(event) => void props.onUpdateUser({ appearance: { accent: event.target.value as "forest" | "gold" | "ink" } })}><option value="forest">森</option><option value="gold">金</option><option value="ink">インク</option></select></SettingRow>
           <SettingRow title="表示密度" description="各パネルの余白とコントロールの密度を調整します。"><select value={props.settings.appearance.density} onChange={(event) => void props.onUpdateUser({ appearance: { density: event.target.value as "comfortable" | "compact" } })}><option value="comfortable">標準</option><option value="compact">コンパクト</option></select></SettingRow>
         </SettingsSection>}
