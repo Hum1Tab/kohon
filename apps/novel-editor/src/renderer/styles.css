@@ -371,7 +371,7 @@ body.is-resizing * { cursor: inherit !important; }
 .checkpoint-diff summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; cursor: pointer; }
 .checkpoint-diff summary small { color: var(--nl-muted); }
 .diff-hunks { padding: 0 8px 9px; overflow-x: auto; }
-.diff-line { display: grid; grid-template-columns: 24px minmax(max-content, 1fr); min-width: max-content; font: 10px/1.55 var(--nl-font-mono); }
+.diff-line { display: grid; grid-template-columns: 24px 24px minmax(max-content, 1fr); min-width: max-content; font: 10px/1.55 var(--nl-font-mono); }
 .diff-line > span { color: var(--nl-muted); text-align: center; user-select: none; }
 .diff-line code { padding: 0 6px; color: var(--nl-text); white-space: pre; }
 .diff-line.add { background: color-mix(in srgb, var(--nl-success) 12%, transparent); }
