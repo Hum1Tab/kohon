@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { ProjectStore, type NoteKind, type ProjectSettings, type ReviewStatus } from "@novel-lens/project-store";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from "electron";
 
 import { isHexColor } from "../shared/editor-theme.js";
 import { sanitizeEditorSession } from "../shared/editor-session.js";
@@ -85,8 +85,13 @@ function recoveryDraftForWrite(value: unknown): RecoveryDraft {
   return recoveryDraftFrom({ ...source, schemaVersion: 1, updatedAt: new Date().toISOString() }, source["chapterId"]);
 }
 
+function trustedIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
+  return mainWindow !== null && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame;
+}
+
 function handle(channel: string, listener: (...args: any[]) => unknown | Promise<unknown>): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
+  ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+    if (!trustedIpcSender(event)) throw new Error("IPC送信元を確認できません。");
     try { return await listener(...args); }
     catch (error) { throw new Error(safeMessage(error)); }
   });
@@ -492,18 +497,49 @@ function registerIpc(): void {
   });
   handle("app:open-external", openExternalPage);
   ipcMain.on("app:close-ready", (event) => {
-    if (mainWindow === null || event.sender !== mainWindow.webContents) return;
+    if (!trustedIpcSender(event) || mainWindow === null) return;
     closeApproved = true;
     if (closeFallback !== null) { clearTimeout(closeFallback); closeFallback = null; }
     mainWindow.close();
   });
   ipcMain.on("app:close-cancel", (event) => {
-    if (mainWindow === null || event.sender !== mainWindow.webContents) return;
+    if (!trustedIpcSender(event) || mainWindow === null) return;
     closeApproved = false;
     if (closeFallback !== null) { clearTimeout(closeFallback); closeFallback = null; }
     mainWindow.show();
     mainWindow.focus();
   });
+}
+
+function armCloseFallback(): void {
+  if (closeFallback !== null) clearTimeout(closeFallback);
+  closeFallback = setTimeout(() => {
+    closeFallback = null;
+    void confirmSlowClose();
+  }, 4_000);
+}
+
+async function confirmSlowClose(): Promise<void> {
+  const window = mainWindow;
+  if (window === null || window.isDestroyed() || closeApproved) return;
+  const result = await dialog.showMessageBox(window, {
+    type: "warning",
+    title: "保存の完了を待っています",
+    message: "原稿の保存処理がまだ完了していません。",
+    detail: "通常は「保存を待つ」を選んでください。強制終了すると、最後の入力は復旧ドラフトから戻す必要があります。",
+    buttons: ["保存を待つ", "強制終了"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  });
+  if (mainWindow !== window || window.isDestroyed() || closeApproved) return;
+  if (result.response === 1) {
+    closeApproved = true;
+    window.close();
+    return;
+  }
+  window.webContents.send("app:before-close");
+  armCloseFallback();
 }
 
 function sendMenuAction(action: AppCommandId): void {
@@ -565,13 +601,7 @@ async function createWindow(): Promise<void> {
     if (closeApproved) return;
     event.preventDefault();
     mainWindow?.webContents.send("app:before-close");
-    if (closeFallback === null) {
-      closeFallback = setTimeout(() => {
-        closeApproved = true;
-        closeFallback = null;
-        mainWindow?.close();
-      }, 4000);
-    }
+    if (closeFallback === null) armCloseFallback();
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   await mainWindow.loadFile(join(__dirname, "../dist/index.html"));
