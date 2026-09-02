@@ -23,6 +23,10 @@ export type AppCommandId =
   | "editor.splitRight"
   | "editor.splitDown"
   | "editor.closeGroup"
+  | "editor.ruby"
+  | "editor.emphasis"
+  | "editor.normalizePunctuation"
+  | "editor.indentedParagraph"
   | "history.checkpoint"
   | "file.export"
   | "view.settings"
@@ -59,6 +63,10 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "editor.splitRight", label: "エディターを右に分割", category: "表示", defaultBinding: "Mod+\\" },
   { id: "editor.splitDown", label: "エディターを下に分割", category: "表示", defaultBinding: "" },
   { id: "editor.closeGroup", label: "現在のエディターグループを閉じる", category: "表示", defaultBinding: "" },
+  { id: "editor.ruby", label: "選択範囲にルビ", category: "編集", defaultBinding: "" },
+  { id: "editor.emphasis", label: "選択範囲に傍点", category: "編集", defaultBinding: "" },
+  { id: "editor.normalizePunctuation", label: "選択範囲の三点リーダー・ダッシュを整える", category: "編集", defaultBinding: "" },
+  { id: "editor.indentedParagraph", label: "字下げした段落を挿入", category: "編集", defaultBinding: "" },
   { id: "history.checkpoint", label: "保存点を作る", category: "履歴", defaultBinding: "Mod+Shift+S" },
   { id: "file.export", label: "Markdownを書き出す", category: "ファイル", defaultBinding: "Mod+Alt+E" },
   { id: "view.settings", label: "設定を開く", category: "表示", defaultBinding: "Mod+," },

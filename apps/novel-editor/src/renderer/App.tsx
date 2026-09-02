@@ -5,6 +5,7 @@ import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../s
 import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConflict, editBuffer, loadBuffer, pruneBuffers, saveFailed, saveSucceeded, type EditorBuffersState } from "../shared/editor-buffers.js";
 import { closeEditorGroup, closeEditorTab, defaultEditorSession, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
+import { insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
 import {
   COMMAND_DEFINITIONS,
   defaultLayout,
@@ -1188,6 +1189,27 @@ export function App(): ReactNode {
     setQuickAccessMode(mode);
   }, [isComposing]);
 
+  const applyJapaneseInput = useCallback((transform: (input: TextareaSelection) => JapaneseInputResult, requireSelection = false): void => {
+    const editor = editorRef.current;
+    if (isComposing || activeChapterId === null || editor === null) return;
+    if (requireSelection && editor.selectionStart === editor.selectionEnd) { setError("本文の対象範囲を選択してください。"); return; }
+    const result = transform({ text: editor.value, selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd });
+    textRef.current = result.nextText;
+    setText(result.nextText);
+    setEditorSession((current) => updateEditorTabView(current, current.activeGroupId, activeChapterId, { selectionStart: result.nextSelectionStart, selectionEnd: result.nextSelectionEnd }));
+    focusRange(result.nextSelectionStart, result.nextSelectionEnd);
+  }, [activeChapterId, focusRange, isComposing, setText]);
+
+  const insertRuby = useCallback(async (): Promise<void> => {
+    const editor = editorRef.current;
+    if (isComposing || editor === null) return;
+    if (editor.selectionStart === editor.selectionEnd) { setError("ルビを付ける本文を選択してください。"); return; }
+    const reading = await requestText({ title: "ルビを付ける", label: "読み", initialValue: "", confirmLabel: "ルビを付ける" });
+    if (reading === null) return;
+    if (/[\r\n《》]/u.test(reading)) { setError("読みには改行や《 》を使えません。"); return; }
+    applyJapaneseInput((input) => wrapSelectionWithRuby(input, reading.trim()), true);
+  }, [applyJapaneseInput, isComposing, requestText]);
+
   const executeCommand = useCallback((action: AppCommandId): void => {
     if (isComposing) return;
     setQuickAccessMode(null);
@@ -1201,6 +1223,10 @@ export function App(): ReactNode {
     else if (action === "editor.splitRight") splitActiveEditor("right");
     else if (action === "editor.splitDown") splitActiveEditor("down");
     else if (action === "editor.closeGroup") void closeActiveEditorGroup();
+    else if (action === "editor.ruby") void insertRuby();
+    else if (action === "editor.emphasis") applyJapaneseInput(wrapSelectionWithBouten, true);
+    else if (action === "editor.normalizePunctuation") applyJapaneseInput(normalizeSelectedPunctuation, true);
+    else if (action === "editor.indentedParagraph") applyJapaneseInput(insertParagraphIndent);
     else if (action === "history.checkpoint") void createCheckpoint();
     else if (action === "file.export") void exportProject();
     else if (action === "view.settings") openSettings("general");
@@ -1218,7 +1244,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, isComposing, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
+  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, insertRuby, isComposing, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;
