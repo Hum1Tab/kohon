@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
 import { closeEditorTab, defaultEditorSession, openEditorTab, updateEditorTabView, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
+import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
 import {
+  COMMAND_DEFINITIONS,
   defaultLayout,
   defaultUserSettings,
   EDITOR_SCROLL_MIN_HEIGHT,
@@ -11,10 +13,12 @@ import {
   moveSlotToSide,
   moveView,
   placeViewOnSide,
+  formatKeybinding,
   sideOf,
   slotOf,
   VIEW_IDS,
   type LayoutPreferences,
+  type AppCommandId,
   type PhysicalSide,
   type SlotId,
   type UserSettingsPatch,
@@ -40,9 +44,12 @@ import type {
 import { defaultChapterTitle } from "../shared/chapter-title.js";
 import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
+import { EditorFindBar } from "./EditorFindBar.js";
+import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type ScopeMode = "current" | "through-current" | "all";
+type QuickAccessMode = "commands" | "chapters";
 
 type DropTarget =
   | { kind: "slot-tab"; slot: SlotId; index: number }
@@ -155,6 +162,14 @@ export function App(): ReactNode {
   const [lensResult, setLensResult] = useState<LensRunResult | null>(null);
   const [lensBusy, setLensBusy] = useState(false);
   const [textPrompt, setTextPrompt] = useState<TextPromptRequest | null>(null);
+  const [quickAccessMode, setQuickAccessMode] = useState<QuickAccessMode | null>(null);
+  const [quickAccessQuery, setQuickAccessQuery] = useState("");
+  const [findOpen, setFindOpen] = useState(false);
+  const [replaceVisible, setReplaceVisible] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [replacement, setReplacement] = useState("");
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [findMatchIndex, setFindMatchIndex] = useState(-1);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const textRef = useRef("");
   const savedVersionRef = useRef("");
@@ -284,6 +299,9 @@ export function App(): ReactNode {
   const canvasText = settings["canvasText"] === null || isHexColor(settings["canvasText"]) ? settings["canvasText"] : userSettings.editor.canvasText;
   const manuscriptPalette = resolveManuscriptPalette(theme, canvasBackground, canvasText);
   const stats = useMemo(() => textStats(text), [text]);
+  const findMatches = useMemo(() => findLiteralMatches(text, findQuery, caseSensitive), [caseSensitive, findQuery, text]);
+  const commandItems = useMemo<QuickAccessItem[]>(() => COMMAND_DEFINITIONS.map((command) => ({ id: command.id, label: command.label, description: command.category, shortcut: formatKeybinding(userSettings.keybindings[command.id]) })), [userSettings.keybindings]);
+  const chapterItems = useMemo<QuickAccessItem[]>(() => manifestChapters.map((item) => ({ id: item.id, label: item.title, description: `${String(item.order + 1).padStart(2, "0")} / 章・場面` })), [manifestChapters]);
   const colorTheme = userSettings.appearance.colorTheme === "system" ? (systemDark ? "dark" : "default") : userSettings.appearance.colorTheme;
   const shellClass = `app-shell ui-${colorTheme} accent-${userSettings.appearance.accent} density-${userSettings.appearance.density}`;
 
@@ -306,6 +324,8 @@ export function App(): ReactNode {
   }, [activeIndex, manifestChapters, scopeMode]);
 
   useEffect(() => { setScopeApproved(false); }, [role, scopeMode, activeChapterId, project?.root]);
+
+  useEffect(() => { setFindMatchIndex((current) => findMatches.length === 0 ? -1 : Math.min(current, findMatches.length - 1)); }, [findMatches.length]);
 
   useEffect(() => { textRef.current = text; }, [text]);
 
@@ -412,6 +432,51 @@ export function App(): ReactNode {
       editor.scrollLeft = view.scrollLeft;
     }, 60);
   }, []);
+
+  const openEditorFind = useCallback((showReplace: boolean): void => {
+    if (isComposing || chapter === null) return;
+    const editor = editorRef.current;
+    const selected = editor === null ? "" : editor.value.slice(editor.selectionStart, editor.selectionEnd);
+    if (selected.length > 0 && selected.length <= 200) setFindQuery(selected);
+    setSettingsOpen(false);
+    setQuickAccessMode(null);
+    setReplaceVisible(showReplace);
+    setFindOpen(true);
+  }, [chapter, isComposing]);
+
+  const closeEditorFind = useCallback((): void => {
+    setFindOpen(false);
+    setReplaceVisible(false);
+    window.requestAnimationFrame(() => editorRef.current?.focus());
+  }, []);
+
+  const moveFindMatch = useCallback((delta: -1 | 1): void => {
+    if (findMatches.length === 0) return;
+    const nextIndex = findMatchIndex < 0 ? (delta === 1 ? 0 : findMatches.length - 1) : (findMatchIndex + delta + findMatches.length) % findMatches.length;
+    setFindMatchIndex(nextIndex);
+    const match = findMatches[nextIndex]!;
+    focusRange(match.start, match.end);
+  }, [findMatchIndex, findMatches, focusRange]);
+
+  const replaceCurrentMatch = useCallback((): void => {
+    if (isComposing || findMatches.length === 0) return;
+    const match = findMatches[Math.min(findMatchIndex, findMatches.length - 1)]!;
+    const result = replaceTextMatch(text, match, replacement);
+    textRef.current = result.text;
+    setText(result.text);
+    focusRange(result.caret, result.caret);
+  }, [findMatchIndex, findMatches, focusRange, isComposing, replacement, text]);
+
+  const replaceEveryMatch = useCallback((): void => {
+    if (isComposing || findQuery.length === 0) return;
+    const result = replaceAllLiteral(text, findQuery, replacement, caseSensitive);
+    if (result.count === 0) return;
+    textRef.current = result.text;
+    setText(result.text);
+    setFindMatchIndex(-1);
+    setNotice(`${result.count}件を置換しました。`);
+    window.requestAnimationFrame(() => editorRef.current?.focus());
+  }, [caseSensitive, findQuery, isComposing, replacement, text]);
 
   const displayChapter = useCallback(async (root: string, next: ChapterDocument, view?: EditorTabState, range?: { start: number; end: number }): Promise<void> => {
     let recovery: RecoveryDraftResult | null = null;
@@ -984,10 +1049,25 @@ export function App(): ReactNode {
     await loadChapter(finding.chapterId, { start: finding.startUtf16, end: finding.endUtf16 });
   }, [loadChapter]);
 
-  useEffect(() => window.novelLens.onMenuAction((action) => {
+  const openQuickAccess = useCallback((mode: QuickAccessMode): void => {
+    if (isComposing) return;
+    setSettingsOpen(false);
+    setViewMenu(null);
+    setLayoutMenuOpen(false);
+    setQuickAccessQuery("");
+    setQuickAccessMode(mode);
+  }, [isComposing]);
+
+  const executeCommand = useCallback((action: AppCommandId): void => {
+    if (isComposing) return;
+    setQuickAccessMode(null);
     if (action === "file.new") void createProject();
     else if (action === "file.open") void openProject();
     else if (action === "file.save") void saveNow();
+    else if (action === "workbench.commandPalette") openQuickAccess("commands");
+    else if (action === "workbench.quickOpen") openQuickAccess("chapters");
+    else if (action === "editor.find") openEditorFind(false);
+    else if (action === "editor.replace") openEditorFind(true);
     else if (action === "history.checkpoint") void createCheckpoint();
     else if (action === "file.export") void exportProject();
     else if (action === "view.settings") openSettings("general");
@@ -1005,7 +1085,16 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }), [checkUpdates, commitLayout, createCheckpoint, createProject, exportProject, openProject, openSettings, revealView, saveNow, userSettings.layout]);
+  }, [checkUpdates, commitLayout, createCheckpoint, createProject, exportProject, isComposing, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveNow, userSettings.layout]);
+
+  const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
+    const mode = quickAccessMode;
+    setQuickAccessMode(null);
+    if (mode === "commands") executeCommand(item.id as AppCommandId);
+    else if (mode === "chapters") void loadChapter(item.id);
+  }, [executeCommand, loadChapter, quickAccessMode]);
+
+  useEffect(() => window.novelLens.onMenuAction(executeCommand), [executeCommand]);
 
   const flushBeforeClose = useCallback(async (): Promise<void> => {
     if (project !== null) {
@@ -1099,10 +1188,21 @@ export function App(): ReactNode {
     onOpenExternal={openExternalPage}
   /> : null;
 
+  const quickAccessOverlay = quickAccessMode === null ? null : <QuickAccess
+    title={quickAccessMode === "commands" ? "コマンド パレット" : "章をクイック オープン"}
+    placeholder={quickAccessMode === "commands" ? "実行する操作を入力" : "章・場面の名前を入力"}
+    query={quickAccessQuery}
+    items={quickAccessMode === "commands" ? commandItems : chapterItems}
+    onQuery={setQuickAccessQuery}
+    onChoose={chooseQuickAccessItem}
+    onClose={() => setQuickAccessMode(null)}
+  />;
+
   if (project === null) return <div className={shellClass} style={shellStyle}>
     <Welcome appInfo={appInfo} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onSettings={() => openSettings("appearance")} />
     {promptDialog}
     {settingsOverlay}
+    {quickAccessOverlay}
   </div>;
 
   const selectViewInSlot = (slot: SlotId, view: ViewId): void => {
@@ -1267,7 +1367,7 @@ export function App(): ReactNode {
       {renderSlot("primary")}
       {renderSlot("secondary")}
 
-      <main data-editor-pane className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"}`} style={{ gridColumn: columnFor("editor"), gridRow: 1, "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}>
+      <main data-editor-pane className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"} ${findOpen ? "find-open" : ""}`} style={{ gridColumn: columnFor("editor"), gridRow: 1, "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}>
         <div className="editor-tabs" role="tablist" aria-label="開いている章">
           {(editorSession.groups.find((group) => group.id === editorSession.activeGroupId)?.tabs ?? []).map((tabState) => {
             const item = manifestChapters.find((candidate) => candidate.id === tabState.chapterId);
@@ -1279,6 +1379,23 @@ export function App(): ReactNode {
             </div>;
           })}
         </div>
+        {findOpen && <EditorFindBar
+          replaceVisible={replaceVisible}
+          query={findQuery}
+          replacement={replacement}
+          caseSensitive={caseSensitive}
+          matchCount={findMatches.length}
+          currentMatch={Math.max(0, Math.min(findMatchIndex, findMatches.length - 1))}
+          onQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }}
+          onReplacement={setReplacement}
+          onToggleReplace={() => setReplaceVisible((visible) => !visible)}
+          onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }}
+          onPrevious={() => moveFindMatch(-1)}
+          onNext={() => moveFindMatch(1)}
+          onReplace={replaceCurrentMatch}
+          onReplaceAll={replaceEveryMatch}
+          onClose={closeEditorFind}
+        />}
         <div className="editor-toolbar">
           <div><span className="eyebrow">{writingMode === "vertical-rl" ? "VERTICAL WRITING" : "WRITING"}</span><h1>{chapter?.chapter.title ?? "章を選択"}</h1></div>
           <div className="editor-actions"><details className="editor-more"><summary aria-label="章の操作" title="章の操作">…</summary><div className="editor-more-menu"><button disabled={activeIndex <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(-1); }}>前へ移動</button><button disabled={activeIndex < 0 || activeIndex >= manifestChapters.length - 1} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void moveChapter(1); }}>後ろへ移動</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void renameChapter(); }}>名前を変更</button><button className="danger-text" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteChapter(); }}>章を削除</button></div></details></div>
@@ -1312,7 +1429,7 @@ export function App(): ReactNode {
       </div>}
     </div>
     <span className="layout-announcement" aria-live="polite">{layoutAnnouncement}</span>
-  </div>{promptDialog}{settingsOverlay}{viewMenu !== null && <div
+  </div>{promptDialog}{settingsOverlay}{quickAccessOverlay}{viewMenu !== null && <div
     ref={viewMenuRef}
     className="view-context-menu"
     role="menu"

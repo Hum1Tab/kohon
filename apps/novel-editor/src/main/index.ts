@@ -436,9 +436,9 @@ function installMenu(): void {
         { role: process.platform === "darwin" ? "close" : "quit" }
       ]
     },
-    { label: "編集", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+    { label: "編集", submenu: [commandMenuItem("editor.find"), commandMenuItem("editor.replace"), { type: "separator" }, { role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
     { label: "設定", submenu: [commandMenuItem("view.settings", "設定を開く…"), { type: "separator" }, commandMenuItem("view.settings.appearance"), commandMenuItem("view.settings.layout"), commandMenuItem("view.settings.editor"), commandMenuItem("view.settings.ai"), commandMenuItem("view.settings.accounts"), commandMenuItem("view.settings.keyboard"), commandMenuItem("view.settings.updates")] },
-    { label: "表示", submenu: [commandMenuItem("view.outline"), commandMenuItem("view.lens"), commandMenuItem("view.search"), commandMenuItem("view.history"), { type: "separator" }, commandMenuItem("view.zen"), commandMenuItem("layout.reset"), { type: "separator" }, { role: "togglefullscreen" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
+    { label: "表示", submenu: [commandMenuItem("workbench.commandPalette"), commandMenuItem("workbench.quickOpen"), { type: "separator" }, commandMenuItem("view.outline"), commandMenuItem("view.lens"), commandMenuItem("view.search"), commandMenuItem("view.history"), { type: "separator" }, commandMenuItem("view.zen"), commandMenuItem("layout.reset"), { type: "separator" }, { role: "togglefullscreen" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
     { label: "ヘルプ", submenu: [commandMenuItem("updates.check"), { label: "GitHub Releasesを開く", click: () => { void openExternalPage("latest-release"); } }] }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

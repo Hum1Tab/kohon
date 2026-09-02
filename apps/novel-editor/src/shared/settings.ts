@@ -16,6 +16,10 @@ export type AppCommandId =
   | "file.new"
   | "file.open"
   | "file.save"
+  | "workbench.commandPalette"
+  | "workbench.quickOpen"
+  | "editor.find"
+  | "editor.replace"
   | "history.checkpoint"
   | "file.export"
   | "view.settings"
@@ -37,7 +41,7 @@ export type AppCommandId =
 export interface CommandDefinition {
   id: AppCommandId;
   label: string;
-  category: "ファイル" | "表示" | "履歴" | "設定" | "更新";
+  category: "ファイル" | "編集" | "表示" | "履歴" | "設定" | "更新";
   defaultBinding: string;
 }
 
@@ -45,6 +49,10 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "file.new", label: "新しい作品", category: "ファイル", defaultBinding: "Mod+N" },
   { id: "file.open", label: "作品を開く", category: "ファイル", defaultBinding: "Mod+O" },
   { id: "file.save", label: "保存", category: "ファイル", defaultBinding: "Mod+S" },
+  { id: "workbench.commandPalette", label: "コマンド パレット", category: "表示", defaultBinding: "Mod+Shift+P" },
+  { id: "workbench.quickOpen", label: "章をクイック オープン", category: "表示", defaultBinding: "Mod+P" },
+  { id: "editor.find", label: "本文内を検索", category: "編集", defaultBinding: "Mod+F" },
+  { id: "editor.replace", label: "本文内を置換", category: "編集", defaultBinding: "Mod+Alt+F" },
   { id: "history.checkpoint", label: "保存点を作る", category: "履歴", defaultBinding: "Mod+Shift+S" },
   { id: "file.export", label: "Markdownを書き出す", category: "ファイル", defaultBinding: "Mod+Alt+E" },
   { id: "view.settings", label: "設定を開く", category: "表示", defaultBinding: "Mod+," },
@@ -56,7 +64,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "view.settings.keyboard", label: "キーボード ショートカットを開く", category: "設定", defaultBinding: "" },
   { id: "view.settings.updates", label: "更新設定を開く", category: "設定", defaultBinding: "" },
   { id: "view.outline", label: "章アウトライン", category: "表示", defaultBinding: "Mod+Shift+E" },
-  { id: "view.search", label: "作品内検索", category: "表示", defaultBinding: "Mod+F" },
+  { id: "view.search", label: "作品内検索", category: "表示", defaultBinding: "Mod+Shift+F" },
   { id: "view.lens", label: "編集レンズ", category: "表示", defaultBinding: "Mod+Shift+L" },
   { id: "view.history", label: "履歴", category: "表示", defaultBinding: "Mod+Shift+H" },
   { id: "view.zen", label: "集中モード", category: "表示", defaultBinding: "Mod+K" },
@@ -84,7 +92,7 @@ export interface AppearancePreferences {
 }
 
 export interface UserSettings {
-  schemaVersion: 2;
+  schemaVersion: 3;
   general: { autoSaveDelayMs: number };
   appearance: AppearancePreferences;
   layout: LayoutPreferences;
@@ -113,7 +121,7 @@ export function defaultKeybindings(): KeybindingMap {
 
 export function defaultUserSettings(): UserSettings {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     general: { autoSaveDelayMs: 800 },
     appearance: { colorTheme: "default", accent: "forest", density: "comfortable" },
     layout: defaultLayout(),
@@ -189,11 +197,24 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
     const normalized = normalizeKeybinding(candidate);
     if (normalized !== null) keybindings[definition.id] = normalized;
   }
+  const storedSchema = typeof source["schemaVersion"] === "number" ? source["schemaVersion"] : 1;
+  if (storedSchema < 3 && rawBindings["editor.find"] === undefined && normalizeKeybinding(typeof rawBindings["view.search"] === "string" ? rawBindings["view.search"] : "Mod+F") === "Mod+F") {
+    keybindings["view.search"] = "Mod+Shift+F";
+    keybindings["editor.find"] = "Mod+F";
+  }
+  const newCommands: readonly AppCommandId[] = ["workbench.commandPalette", "workbench.quickOpen", "editor.find", "editor.replace"];
+  if (storedSchema < 3) {
+    for (const id of newCommands) {
+      if (rawBindings[id] !== undefined || keybindings[id].length === 0) continue;
+      const collision = COMMAND_DEFINITIONS.some((definition) => definition.id !== id && !newCommands.includes(definition.id) && keybindings[definition.id] === keybindings[id]);
+      if (collision) keybindings[id] = "";
+    }
+  }
   try { validateKeybindings(keybindings); }
   catch { return defaults; }
   const isV2Layout = (typeof source["schemaVersion"] === "number" && source["schemaVersion"] >= 2) || Object.prototype.hasOwnProperty.call(layout, "slots");
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     general: { autoSaveDelayMs: finiteNumber(general["autoSaveDelayMs"], defaults.general.autoSaveDelayMs, 250, 5000) },
     appearance: {
       colorTheme: appearance["colorTheme"] === "default" || appearance["colorTheme"] === "light" || appearance["colorTheme"] === "dark" || appearance["colorTheme"] === "system" ? appearance["colorTheme"] : defaults.appearance.colorTheme,
@@ -225,7 +246,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
 
 export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatch): UserSettings {
   const candidate = sanitizeUserSettings({
-    schemaVersion: 2,
+    schemaVersion: 3,
     general: { ...current.general, ...patch.general },
     appearance: { ...current.appearance, ...patch.appearance },
     layout: mergeLayout(current.layout, patch.layout),
@@ -238,10 +259,10 @@ export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatc
   return candidate;
 }
 
-/** Serialize v2 settings and include a legacy layout mirror for one release. */
+/** Serialize settings and include a legacy layout mirror until the KOHON migration is complete. */
 export function serializeUserSettings(settings: UserSettings): string {
   const layout = { ...settings.layout, ...projectLayoutV1(settings.layout) };
-  return `${JSON.stringify({ ...settings, schemaVersion: 2, layout }, null, 2)}\n`;
+  return `${JSON.stringify({ ...settings, schemaVersion: 3, layout }, null, 2)}\n`;
 }
 
 export function toElectronAccelerator(binding: string): string | undefined {

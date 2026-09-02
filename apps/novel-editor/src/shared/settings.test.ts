@@ -22,13 +22,20 @@ describe("desktop user settings", () => {
 
   it("migrates v1 layout fields and writes a v1 compatibility mirror", () => {
     const settings = sanitizeUserSettings({ schemaVersion: 1, layout: { primarySidebar: "right", inspector: "bottom", showInspector: false } });
-    expect(settings.schemaVersion).toBe(2);
+    expect(settings.schemaVersion).toBe(3);
     expect(settings.layout.primarySide).toBe("right");
     expect(settings.layout.slots.bottom.visible).toBe(false);
     const serialized = JSON.parse(serializeUserSettings(settings)) as { schemaVersion: number; layout: Record<string, unknown> };
-    expect(serialized.schemaVersion).toBe(2);
+    expect(serialized.schemaVersion).toBe(3);
     expect(serialized.layout["primarySidebar"]).toBe("right");
     expect(serialized.layout["inspector"]).toBe("bottom");
     expect(serialized.layout["slots"]).toBeDefined();
+  });
+
+  it("moves the old workspace search shortcut without discarding custom bindings", () => {
+    const migrated = sanitizeUserSettings({ schemaVersion: 2, keybindings: { "view.search": "Mod+F", "view.lens": "Mod+Alt+L" } });
+    expect(migrated.keybindings["editor.find"]).toBe("Mod+F");
+    expect(migrated.keybindings["view.search"]).toBe("Mod+Shift+F");
+    expect(migrated.keybindings["view.lens"]).toBe("Mod+Alt+L");
   });
 });
