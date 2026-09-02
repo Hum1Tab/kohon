@@ -17,18 +17,20 @@ Non-negotiable guarantees:
 
 ## Current evidence
 
-The released desktop app already has atomic Markdown saves, chapters, direct vertical writing, workspace search, named checkpoints, safe restore, variation copies, evidence-checked AI lenses, user-owned AI connections, configurable workbench layout, keyboard bindings, and cross-platform releases.
+As of 2026-09-03, the rebuild branch has implemented the original high-risk workbench gaps:
 
-The highest-risk gaps are not additional AI roles. They are:
+- persisted tabs, two editor groups, split direction, caret, selection, scroll, and visible recovery drafts;
+- current-document Find/Replace and project-wide replacement preview with a checkpoint before bulk changes;
+- Quick Open, Command Palette, configurable keybindings, and movable/resizable workbench panels;
+- checkpoint diff, checkpoint-to-checkpoint comparison, safe whole-project and chapter-only restore;
+- a persistent Review Ledger with exact-quote anchors and resolved/ignored/stale/needs-recheck states;
+- chapter/scene reordering, split/merge, optional metadata, and pinned Markdown notes;
+- explicit Japanese punctuation, indentation, quote, ruby, emphasis, and tate-chu-yoko helpers without changing the Markdown canonical source;
+- bounded per-chapter undo/redo, IME-aware edit grouping, and a documented 100k-character state/history benchmark;
+- an extracted editor pane and workbench panels instead of keeping all renderer markup in `App.tsx`;
+- code-level keyboard and dialog focus accessibility, IPC sender validation, dependency audit, and protected slow-close handling.
 
-1. one open document and one editor group;
-2. no current-document Find/Replace or bulk workspace replacement preview;
-3. no Quick Open or Command Palette;
-4. no persisted editor session or crash draft journal;
-5. checkpoints cannot be compared before restore;
-6. AI findings are session-only and have no resolved/ignored/stale lifecycle;
-7. the textarea architecture has not been stress-tested for long manuscripts, IME, multiple editor instances, or vertical selection;
-8. `App.tsx` owns too many unrelated responsibilities.
+Focused typechecking, 76 unit/regression tests, and a production desktop bundle pass on the current branch. This is not a substitute for packaged application checks. The remaining product risk is real Windows/macOS/Linux interaction behavior—especially IME, vertical selection/caret, screen readers, clean install, update, and old-project opening—followed by the final KOHON name/config/repository migration.
 
 ## Decisions
 
@@ -61,7 +63,7 @@ The Review Ledger records findings and their evidence, version, read boundary, a
 - Add short-interval recovery drafts separate from canonical saves and checkpoints.
 - Recover a newer draft visibly without silently discarding either version.
 - Add Quick Open and Command Palette using the existing command registry.
-- Add current-document Find/Replace with literal, case-sensitive, and regex modes.
+- Add current-document Find/Replace with literal and case-sensitive modes.
 
 Gate: restart restores tabs/caret; simulated termination loses no journaled text; IME composition never triggers a partial canonical save; old projects open unchanged.
 
@@ -101,6 +103,13 @@ Gate: Windows/macOS/Linux interaction tests where automation is reliable, plus d
 - Minimal optional scene metadata in a documented JSON sidecar.
 - TXT export, followed by fixture-backed DOCX if the dependency/license audit passes.
 - Keep PDF, EPUB, Aozora, Narou, and Kakuyomu profiles adapter-based and defer those without demonstrated daily value.
+
+## First-release scope decisions
+
+- Regex search/replace is deferred. Literal search plus case sensitivity covers the frequent correction flow while avoiding an expert-only mode that can make destructive replacement easier to misunderstand. Project-wide replacement keeps an explicit preview and automatic checkpoint.
+- DOCX is deferred until a round-trip fixture set and dependency/license review exist. Markdown and TXT are the trustworthy exits for 0.1.0; pretending a weak DOCX converter is production-ready would reduce author trust.
+- PDF, EPUB, and posting-site profiles remain adapters for later releases. KOHON 0.1.0 is a writing and evidence-linked review environment, not DTP software.
+- Native textarea remains the editing surface for 0.1.0. The measured state/history path is fast; migration to another editor is justified only by repeatable packaged-app failures, not architecture fashion.
 
 ### Phase F — KOHON launch
 
