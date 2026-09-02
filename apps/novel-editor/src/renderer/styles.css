@@ -254,8 +254,14 @@ body.is-resizing * { cursor: inherit !important; }
 .editor-pane.manuscript-gray { --ms-bg: #e6e8eb; --ms-text: #202124; --ms-line: #cdd1d6; }
 .editor-pane.manuscript-dark { --ms-bg: var(--nl-night-bg); --ms-text: var(--nl-night-text); --ms-line: var(--nl-night-line); }
 .editor-tabs { min-width: 0; height: 36px; display: flex; overflow-x: auto; overflow-y: hidden; background: var(--nl-surface); border-bottom: 1px solid var(--nl-line); scrollbar-width: thin; }
+.editor-tabs.dragging:empty { box-shadow: inset 0 0 0 2px var(--nl-accent); }
 .editor-tab { min-width: 118px; max-width: 230px; display: flex; align-items: stretch; color: var(--nl-muted); background: var(--nl-surface); border-right: 1px solid var(--nl-line); }
 .editor-tab.active { color: var(--nl-text); background: var(--nl-surface-raised); box-shadow: inset 0 2px var(--nl-accent); }
+.editor-tab.drag-source { opacity: .45; }
+.editor-tab.drop-before { box-shadow: inset 2px 0 var(--nl-accent); }
+.editor-tab.drop-after { box-shadow: inset -2px 0 var(--nl-accent); }
+.editor-tab.active.drop-before { box-shadow: inset 2px 0 var(--nl-accent), inset 0 2px var(--nl-accent); }
+.editor-tab.active.drop-after { box-shadow: inset -2px 0 var(--nl-accent), inset 0 2px var(--nl-accent); }
 .editor-tab > button[role="tab"] { min-width: 0; flex: 1; display: flex; align-items: center; gap: 7px; overflow: hidden; padding: 0 4px 0 12px; color: inherit; background: transparent; border: 0; text-align: left; }
 .editor-tab > button[role="tab"] span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-tab > button[role="tab"] i { color: var(--nl-accent); font-size: 8px; font-style: normal; }

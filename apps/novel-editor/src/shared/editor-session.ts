@@ -97,7 +97,8 @@ export function closeEditorTab(session: EditorSessionState, groupId: EditorGroup
 export function splitEditor(session: EditorSessionState, direction: Exclude<EditorSplit, "none">, chapterId?: string): EditorSessionState {
   const current = session.groups.find((group) => group.id === session.activeGroupId) ?? session.groups[0]!;
   const desiredChapter = chapterId ?? current.activeChapterId;
-  const second: EditorGroupState = session.groups[1] ?? { id: "group-2", tabs: desiredChapter === null ? [] : [tab(desiredChapter)], activeChapterId: desiredChapter };
+  const desiredTab = desiredChapter === null ? null : current.tabs.find((item) => item.chapterId === desiredChapter) ?? tab(desiredChapter);
+  const second: EditorGroupState = session.groups[1] ?? { id: "group-2", tabs: desiredTab === null ? [] : [{ ...desiredTab }], activeChapterId: desiredChapter };
   return { ...session, split: direction, activeGroupId: "group-2", groups: [session.groups[0]!, second] };
 }
 
@@ -109,4 +110,53 @@ export function closeEditorGroup(session: EditorSessionState, groupId: EditorGro
 
 export function updateEditorTabView(session: EditorSessionState, groupId: EditorGroupId, chapterId: string, patch: Partial<Omit<EditorTabState, "chapterId">>): EditorSessionState {
   return { ...session, groups: session.groups.map((group) => group.id !== groupId ? group : { ...group, tabs: group.tabs.map((item) => item.chapterId === chapterId ? { ...item, ...patch } : item) }) };
+}
+
+function tabIndex(value: number, length: number): number {
+  const requested = typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
+  return Math.max(0, Math.min(length, requested));
+}
+
+/** Move an existing tab while preserving its native editor view state. */
+export function moveEditorTab(session: EditorSessionState, sourceGroupId: EditorGroupId, chapterId: string, targetGroupId: EditorGroupId, targetIndex: number): EditorSessionState {
+  const sourceGroup = session.groups.find((group) => group.id === sourceGroupId);
+  const targetGroup = session.groups.find((group) => group.id === targetGroupId);
+  if (sourceGroup === undefined || targetGroup === undefined) return session;
+
+  const sourceIndex = sourceGroup.tabs.findIndex((item) => item.chapterId === chapterId);
+  if (sourceIndex < 0) return session;
+  const movedTab = sourceGroup.tabs[sourceIndex]!;
+
+  if (sourceGroupId === targetGroupId) {
+    const remaining = sourceGroup.tabs.filter((_, index) => index !== sourceIndex);
+    const insertionIndex = tabIndex(targetIndex, remaining.length);
+    const tabs = [...remaining.slice(0, insertionIndex), movedTab, ...remaining.slice(insertionIndex)];
+    return {
+      ...session,
+      activeGroupId: targetGroupId,
+      groups: session.groups.map((group) => group.id === sourceGroupId ? { ...group, tabs, activeChapterId: chapterId } : group)
+    };
+  }
+
+  const sourceTabs = sourceGroup.tabs.filter((_, index) => index !== sourceIndex);
+  const sourceActiveChapterId = sourceGroup.activeChapterId === chapterId
+    ? sourceTabs[Math.min(sourceIndex, sourceTabs.length - 1)]?.chapterId ?? null
+    : sourceGroup.activeChapterId;
+  const targetAlreadyHasTab = targetGroup.tabs.some((item) => item.chapterId === chapterId);
+  const targetTabs = targetAlreadyHasTab
+    ? targetGroup.tabs
+    : (() => {
+      const insertionIndex = tabIndex(targetIndex, targetGroup.tabs.length);
+      return [...targetGroup.tabs.slice(0, insertionIndex), movedTab, ...targetGroup.tabs.slice(insertionIndex)];
+    })();
+
+  return {
+    ...session,
+    activeGroupId: targetGroupId,
+    groups: session.groups.map((group) => {
+      if (group.id === sourceGroupId) return { ...group, tabs: sourceTabs, activeChapterId: sourceActiveChapterId };
+      if (group.id === targetGroupId) return { ...group, tabs: targetTabs, activeChapterId: chapterId };
+      return group;
+    })
+  };
 }

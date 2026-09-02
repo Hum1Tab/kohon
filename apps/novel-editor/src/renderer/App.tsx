@@ -1,9 +1,9 @@
 import { getRole, ROLE_REGISTRY, textStats } from "@novel-lens/editor-core";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
 import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConflict, editBuffer, loadBuffer, pruneBuffers, saveFailed, saveSucceeded, type EditorBuffersState } from "../shared/editor-buffers.js";
-import { closeEditorGroup, closeEditorTab, defaultEditorSession, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
+import { closeEditorGroup, closeEditorTab, defaultEditorSession, moveEditorTab, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
 import { insertParagraphIndent, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
 import {
@@ -55,6 +55,8 @@ import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type QuickAccessMode = "commands" | "chapters";
+type EditorTabDragState = { groupId: EditorGroupId; chapterId: string };
+type EditorTabDropState = { groupId: EditorGroupId; index: number };
 
 type DropTarget =
   | { kind: "slot-tab"; slot: SlotId; index: number }
@@ -175,6 +177,8 @@ export function App(): ReactNode {
   const [replacement, setReplacement] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [findMatchIndex, setFindMatchIndex] = useState(-1);
+  const [editorTabDrag, setEditorTabDrag] = useState<EditorTabDragState | null>(null);
+  const [editorTabDrop, setEditorTabDrop] = useState<EditorTabDropState | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const editorRefs = useRef<Partial<Record<EditorGroupId, HTMLTextAreaElement>>>({});
   const textRef = useRef("");
@@ -1210,6 +1214,28 @@ export function App(): ReactNode {
     applyJapaneseInput((input) => wrapSelectionWithRuby(input, reading.trim()), true);
   }, [applyJapaneseInput, isComposing, requestText]);
 
+  const moveActiveEditorTab = useCallback((delta: -1 | 1): void => {
+    setEditorSession((current) => {
+      const group = current.groups.find((candidate) => candidate.id === current.activeGroupId);
+      if (group?.activeChapterId === null || group?.activeChapterId === undefined) return current;
+      const index = group.tabs.findIndex((tabState) => tabState.chapterId === group.activeChapterId);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= group.tabs.length) return current;
+      return moveEditorTab(current, group.id, group.activeChapterId, group.id, target);
+    });
+  }, []);
+
+  const moveActiveEditorTabToOtherGroup = useCallback((): void => {
+    setEditorSession((current) => {
+      const source = current.groups.find((candidate) => candidate.id === current.activeGroupId);
+      if (source?.activeChapterId === null || source?.activeChapterId === undefined) return current;
+      const prepared = current.groups.length === 1 ? splitEditor(current, "right", source.activeChapterId) : current;
+      const target = prepared.groups.find((group) => group.id !== source.id);
+      if (target === undefined) return current;
+      return moveEditorTab(prepared, source.id, source.activeChapterId, target.id, target.tabs.length);
+    });
+  }, []);
+
   const executeCommand = useCallback((action: AppCommandId): void => {
     if (isComposing) return;
     setQuickAccessMode(null);
@@ -1227,6 +1253,9 @@ export function App(): ReactNode {
     else if (action === "editor.emphasis") applyJapaneseInput(wrapSelectionWithBouten, true);
     else if (action === "editor.normalizePunctuation") applyJapaneseInput(normalizeSelectedPunctuation, true);
     else if (action === "editor.indentedParagraph") applyJapaneseInput(insertParagraphIndent);
+    else if (action === "editor.moveTabLeft") moveActiveEditorTab(-1);
+    else if (action === "editor.moveTabRight") moveActiveEditorTab(1);
+    else if (action === "editor.moveTabToOtherGroup") moveActiveEditorTabToOtherGroup();
     else if (action === "history.checkpoint") void createCheckpoint();
     else if (action === "file.export") void exportProject();
     else if (action === "view.settings") openSettings("general");
@@ -1244,7 +1273,7 @@ export function App(): ReactNode {
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
     else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, insertRuby, isComposing, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
+  }, [applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, insertRuby, isComposing, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;
@@ -1473,6 +1502,28 @@ export function App(): ReactNode {
     });
   };
 
+  const beginEditorTabDrag = (groupId: EditorGroupId, chapterId: string, event: ReactDragEvent<HTMLDivElement>): void => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", chapterId);
+    setEditorTabDrag({ groupId, chapterId });
+    setEditorTabDrop(null);
+  };
+  const editorTabDropIndex = (event: ReactDragEvent<HTMLDivElement>, index: number): number => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
+  };
+  const dropEditorTab = (groupId: EditorGroupId, index: number): void => {
+    if (editorTabDrag === null) return;
+    setEditorSession((current) => {
+      const source = current.groups.find((group) => group.id === editorTabDrag.groupId);
+      const sourceIndex = source?.tabs.findIndex((tabState) => tabState.chapterId === editorTabDrag.chapterId) ?? -1;
+      const targetIndex = editorTabDrag.groupId === groupId && sourceIndex >= 0 && index > sourceIndex ? index - 1 : index;
+      return moveEditorTab(current, editorTabDrag.groupId, editorTabDrag.chapterId, groupId, targetIndex);
+    });
+    setEditorTabDrag(null);
+    setEditorTabDrop(null);
+  };
+
   const renderEditorGroup = (group: EditorSessionState["groups"][number]): ReactNode => {
     const groupChapterId = group.activeChapterId;
     const buffer = groupChapterId === null ? undefined : editorBuffers.buffers[groupChapterId];
@@ -1485,14 +1536,16 @@ export function App(): ReactNode {
       style={{ "--ms-bg": manuscriptPalette.background, "--ms-text": manuscriptPalette.text, "--ms-line": manuscriptPalette.line } as CSSProperties}
       onPointerDown={() => activateEditorGroup(group.id)}
     >
-      <div className="editor-tabs" role="tablist" aria-label={`開いている章 ${group.id}`}>
-        {group.tabs.map((tabState) => {
+      <div className={`editor-tabs ${editorTabDrag !== null ? "dragging" : ""}`} role="tablist" aria-label={`開いている章 ${group.id}`} onDragOver={(event) => { if (event.target !== event.currentTarget || editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId: group.id, index: group.tabs.length }); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); dropEditorTab(group.id, group.tabs.length); }}>
+        {group.tabs.map((tabState, tabIndex) => {
           const item = manifestChapters.find((candidate) => candidate.id === tabState.chapterId);
           if (item === undefined) return null;
           const active = item.id === groupChapterId;
           const tabBuffer = editorBuffers.buffers[item.id];
-          return <div className={`editor-tab ${active ? "active" : ""}`} key={item.id} role="presentation">
-            <button role="tab" aria-selected={active} onClick={() => void loadChapter(item.id, undefined, group.id)} title={item.title}><span>{item.title}</span>{tabBuffer !== undefined && tabBuffer.saveState !== "saved" ? <i aria-label="未保存">●</i> : null}</button>
+          const dropIndex = editorTabDrop?.groupId === group.id ? editorTabDrop.index : -1;
+          const dropClass = dropIndex === tabIndex ? "drop-before" : dropIndex === tabIndex + 1 ? "drop-after" : "";
+          return <div className={`editor-tab ${active ? "active" : ""} ${editorTabDrag?.groupId === group.id && editorTabDrag.chapterId === item.id ? "drag-source" : ""} ${dropClass}`} key={item.id} role="presentation" draggable onDragStart={(event) => beginEditorTabDrag(group.id, item.id, event)} onDragEnd={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onDragOver={(event) => { if (editorTabDrag === null) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId: group.id, index: editorTabDropIndex(event, tabIndex) }); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(group.id, editorTabDropIndex(event, tabIndex)); }}>
+            <button role="tab" aria-selected={active} onClick={() => void loadChapter(item.id, undefined, group.id)} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; const delta = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0; const target = tabIndex + delta; if (delta === 0 || target < 0 || target >= group.tabs.length) return; event.preventDefault(); setEditorSession((current) => moveEditorTab(current, group.id, item.id, group.id, target)); }} title={`${item.title}（ドラッグ、または Alt+Shift+←/→ で移動）`}><span>{item.title}</span>{tabBuffer !== undefined && tabBuffer.saveState !== "saved" ? <i aria-label="未保存">●</i> : null}</button>
             <button className="editor-tab-close" aria-label={`${item.title}を閉じる`} title="閉じる" onClick={(event) => { event.stopPropagation(); void closeChapterTab(item.id, group.id); }}><AppIcon name="close" /></button>
           </div>;
         })}
