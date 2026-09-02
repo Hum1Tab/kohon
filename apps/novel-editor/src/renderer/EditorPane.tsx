@@ -127,14 +127,34 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
           <button
             role="tab"
             aria-selected={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => props.onLoadChapter(item.id, group.id)}
             onKeyDown={(event) => {
-              if (!event.altKey || !event.shiftKey) return;
-              const delta = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
-              const target = tabIndex + delta;
-              if (delta === 0 || target < 0 || target >= group.tabs.length) return;
+              if (event.altKey && event.shiftKey) {
+                const delta = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+                const target = tabIndex + delta;
+                if (delta === 0 || target < 0 || target >= group.tabs.length) return;
+                event.preventDefault();
+                props.onMoveTab(group.id, item.id, target);
+                return;
+              }
+              if (event.altKey || event.ctrlKey || event.metaKey) return;
+              const target = event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? group.tabs.length - 1
+                  : event.key === "ArrowLeft"
+                    ? (tabIndex - 1 + group.tabs.length) % group.tabs.length
+                    : event.key === "ArrowRight"
+                      ? (tabIndex + 1) % group.tabs.length
+                      : null;
+              if (target === null || target === tabIndex) return;
+              const targetTab = group.tabs[target];
+              if (targetTab === undefined) return;
               event.preventDefault();
-              props.onMoveTab(group.id, item.id, target);
+              const buttons = event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+              buttons?.[target]?.focus();
+              props.onLoadChapter(targetTab.chapterId, group.id);
             }}
             title={`${item.title}（ドラッグ、または Alt+Shift+←/→ で移動）`}
           >

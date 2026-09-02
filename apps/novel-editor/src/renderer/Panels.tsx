@@ -23,6 +23,7 @@ import type {
   SearchHit
 } from "../shared/types.js";
 import { AppIcon } from "./AppIcon.js";
+import { useModalFocus } from "./useModalFocus.js";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 export type NoteDraft = { id: string; title: string; kind: NoteKind; chapterIds: string[]; text: string };
@@ -110,14 +111,16 @@ export function ChapterMetadataPanel({ chapter, onSave }: { chapter: Chapter; on
 
 export function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromptRequest; onCancel: () => void; onSubmit: (value: string) => void }): ReactNode {
   const [value, setValue] = useState(request.initialValue);
+  const modal = useModalFocus<HTMLFormElement>(onCancel);
 
   return <div className="prompt-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <form
+      ref={modal.ref}
       className="prompt-dialog"
       role="dialog"
       aria-modal="true"
       aria-labelledby={`prompt-title-${request.id}`}
-      onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}
+      onKeyDown={modal.onKeyDown}
       onSubmit={(event) => { event.preventDefault(); if (value.trim().length > 0) onSubmit(value.trim()); }}
     >
       <span className="eyebrow">NOVEL LENS</span>
@@ -132,7 +135,7 @@ export function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCre
   return <main className="welcome">
     <header className="welcome-header">
       <div className="welcome-brand"><AppIcon name="logo" size={30} tile /><span><b>Novel Lens</b><small>Writing workspace</small></span></div>
-      <div className="welcome-header-actions"><button className="icon-button" onClick={onToggleTheme} title="配色を切り替える"><AppIcon name={colorTheme === "dark" ? "sun" : "moon"} /></button><button className="icon-button" onClick={onSettings} title="設定"><AppIcon name="settings" /></button></div>
+      <div className="welcome-header-actions"><button className="icon-button" onClick={onToggleTheme} title="配色を切り替える" aria-label="配色を切り替える"><AppIcon name={colorTheme === "dark" ? "sun" : "moon"} /></button><button className="icon-button" onClick={onSettings} title="設定" aria-label="設定を開く"><AppIcon name="settings" /></button></div>
     </header>
 
     <section className="welcome-hero">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent,
 
 import { automaticTextColor, contrastRatio, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
 import { AppIcon, type IconName } from "./AppIcon.js";
+import { useModalFocus } from "./useModalFocus.js";
 
 import {
   COMMAND_DEFINITIONS,
@@ -92,6 +93,7 @@ function StatusBadge({ state, children }: { state: "ok" | "warn" | "muted"; chil
 }
 
 export function SettingsView(props: SettingsViewProps): ReactNode {
+  const modal = useModalFocus<HTMLDivElement>(props.onClose);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"user" | "workspace">("user");
   const [openAIKey, setOpenAIKey] = useState("");
@@ -207,7 +209,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
     <p className="settings-note">公式Codex App Serverのbrowser flowを使用します。AIレンズの実行はChatGPTプランのCodex利用枠へ計上され、認証tokenをNovel Lensのrendererや作品ファイルへ渡しません。</p>
   </div>;
 
-  return <div className="settings-view" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  return <div ref={modal.ref} className="settings-view" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={modal.onKeyDown}>
     <header className="settings-header">
       <button className="settings-back" onClick={props.onClose} aria-label="設定を閉じる">←</button>
       <div><span className="eyebrow">PREFERENCES</span><h1 id="settings-title">設定</h1></div>
@@ -220,7 +222,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
         {visibleCategories.length === 0 && <p>一致する設定がありません。</p>}
       </nav>
       <main className="settings-main">
-        {error !== null && <div className="settings-error" role="alert">{error}<button onClick={() => setError(null)}>×</button></div>}
+        {error !== null && <div className="settings-error" role="alert">{error}<button aria-label="エラーを閉じる" onClick={() => setError(null)}>×</button></div>}
         {props.category === "general" && <SettingsSection eyebrow="APPLICATION" title="全般" lead="アプリ全体の動作を設定します。作品本文には保存されません。">
           <SettingRow title="自動保存" description="入力を止めてから保存するまでの時間です。IME変換中は保存しません。"><select value={props.settings.general.autoSaveDelayMs} onChange={(event) => void props.onUpdateUser({ general: { autoSaveDelayMs: Number(event.target.value) } })}><option value="400">0.4秒</option><option value="800">0.8秒</option><option value="1500">1.5秒</option><option value="3000">3秒</option></select></SettingRow>
           <SettingRow title="設定の保存場所" description="ユーザー設定はOSのNovel Lens設定フォルダーに保存します。APIキーとGitHub tokenは含みません。"><StatusBadge state="ok">ローカルのみ</StatusBadge></SettingRow>

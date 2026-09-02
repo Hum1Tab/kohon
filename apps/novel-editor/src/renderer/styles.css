@@ -218,7 +218,7 @@ body.is-docking * { cursor: inherit !important; }
 .pane-resizer::after { content: ""; position: absolute; background: transparent; transition: background 120ms ease; }
 .pane-resizer.vertical::after { top: 0; bottom: 0; left: 3px; width: 1px; }
 .pane-resizer.horizontal::after { top: 3px; right: 0; left: 0; height: 1px; }
-.pane-resizer:hover::after { background: var(--nl-accent); }
+.pane-resizer:hover::after, .pane-resizer:focus-visible::after { background: var(--nl-accent); }
 body.is-resizing { cursor: col-resize; user-select: none; }
 body.is-resizing * { cursor: inherit !important; }
 .pane-heading { min-height: 70px; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 16px 14px 10px; }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useModalFocus } from "./useModalFocus.js";
 
 export interface QuickAccessItem {
   id: string;
@@ -20,6 +21,7 @@ interface QuickAccessProps {
 export function QuickAccess(props: QuickAccessProps): ReactNode {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState(0);
+  const modal = useModalFocus<HTMLElement>(props.onClose);
   const visible = useMemo(() => {
     const query = props.query.trim().toLocaleLowerCase("ja-JP");
     if (query.length === 0) return props.items.slice(0, 100);
@@ -44,7 +46,7 @@ export function QuickAccess(props: QuickAccessProps): ReactNode {
   };
 
   return <div className="quick-access-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
-    <section className="quick-access" role="dialog" aria-modal="true" aria-label={props.title}>
+    <section ref={modal.ref} className="quick-access" role="dialog" aria-modal="true" aria-label={props.title} onKeyDown={modal.onKeyDown}>
       <header><span>{props.title}</span><kbd>Esc</kbd></header>
       <input ref={inputRef} role="combobox" aria-expanded="true" aria-controls="quick-access-results" aria-activedescendant={visible[selected] === undefined ? undefined : `quick-item-${visible[selected]!.id}`} value={props.query} onChange={(event) => props.onQuery(event.target.value)} onKeyDown={handleKey} placeholder={props.placeholder} />
       <div id="quick-access-results" className="quick-access-results" role="listbox">

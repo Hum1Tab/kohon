@@ -1237,6 +1237,29 @@ export function App(): ReactNode {
     owner.addEventListener("lostpointercapture", onLostCapture);
   }, [updateUserSettings, userSettings.layout]);
 
+  const resizePaneFromKeyboard = useCallback((slot: SlotId, event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const layout = userSettings.layout;
+    const limits = LAYOUT_LIMITS[slot];
+    const current = layout.slots[slot].size;
+    let next: number | null = null;
+
+    if (event.key === "Home") next = limits.min;
+    else if (event.key === "End") next = limits.max;
+    else if (slot === "bottom" && (event.key === "ArrowUp" || event.key === "ArrowDown")) next = current + (event.key === "ArrowUp" ? 10 : -10);
+    else if (slot !== "bottom" && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      const growingDirection = sideOf(slot, layout) === "left" ? "ArrowRight" : "ArrowLeft";
+      next = current + (event.key === growingDirection ? 10 : -10);
+    }
+    if (next === null) return;
+
+    event.preventDefault();
+    const size = Math.max(limits.min, Math.min(limits.max, next));
+    commitLayout({
+      ...layout,
+      slots: { ...layout.slots, [slot]: { ...layout.slots[slot], size } }
+    }, `パネルのサイズを${Math.round(size)}ピクセルに変更しました`);
+  }, [commitLayout, userSettings.layout]);
+
   const detectDropTarget = useCallback((x: number, y: number): DropTarget => {
     const element = document.elementFromPoint(x, y) as HTMLElement | null;
     const exactTab = element?.closest<HTMLElement>("[data-view-tab]");
@@ -1681,7 +1704,7 @@ export function App(): ReactNode {
         onContextMenu={(event) => { event.preventDefault(); openViewMenu("outline", event.clientX, event.clientY); }}
         onKeyDown={(event) => handleViewMenuKey("outline", event)}
         tabIndex={0}
-      ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title="章を追加" onClick={() => void addChapter("chapter")}>＋章</button><button className="outline-add-button" title="場面を追加" onClick={() => void addChapter("scene")}>＋場面</button></div></div>
+      ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" aria-label="TXTまたはMarkdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title="章を追加" onClick={() => void addChapter("chapter")}>＋章</button><button className="outline-add-button" title="場面を追加" onClick={() => void addChapter("scene")}>＋場面</button></div></div>
       <nav className="chapter-list" aria-label="章・場面" onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
         {manifestChapters.map((item, index) => {
           const kind = item.kind ?? "chapter";
@@ -1721,7 +1744,18 @@ export function App(): ReactNode {
       }}
       data-slot-id={slotId}
     >
-      {!(bottom && layout.bottomPanelMaximized) && <div className={`pane-resizer ${bottom ? "horizontal edge-top" : `vertical edge-${physicalSide === "left" ? "right" : "left"}`}`} onPointerDown={(event) => beginPaneResize(slotId, event)} />}
+      {!(bottom && layout.bottomPanelMaximized) && <div
+        className={`pane-resizer ${bottom ? "horizontal edge-top" : `vertical edge-${physicalSide === "left" ? "right" : "left"}`}`}
+        role="separator"
+        tabIndex={0}
+        aria-label={`${activeView === null ? "パネル" : VIEW_LABELS[activeView]}のサイズを変更`}
+        aria-orientation={bottom ? "horizontal" : "vertical"}
+        aria-valuemin={LAYOUT_LIMITS[slotId].min}
+        aria-valuemax={LAYOUT_LIMITS[slotId].max}
+        aria-valuenow={Math.round(slot.size)}
+        onPointerDown={(event) => beginPaneResize(slotId, event)}
+        onKeyDown={(event) => resizePaneFromKeyboard(slotId, event)}
+      />}
       <div className="view-tabbar" role="tablist" aria-label={`${slotId}パネル`}>
         <div className="view-tabs-scroll">{slot.views.map((view) => <button
           key={view}
@@ -1941,7 +1975,7 @@ export function App(): ReactNode {
             ><AppIcon name={view === "outline" ? "files" : view} /></button>;
           })}
         </div>
-        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title="設定"><AppIcon name="settings" /></button></div>
+        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title="設定" aria-label="設定を開く"><AppIcon name="settings" /></button></div>
       </aside>}
 
       {renderSlot("primary")}
