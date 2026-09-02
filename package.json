@@ -23,6 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "benchmark:editor": "tsx scripts/benchmark-editor-input.ts",
     "typecheck": "tsc -b --pretty false && pnpm --filter @novel-lens/desktop typecheck"
   },
   "devDependencies": {

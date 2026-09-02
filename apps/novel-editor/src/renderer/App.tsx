@@ -1,4 +1,4 @@
-import { textStats } from "@novel-lens/editor-core";
+import { textStats, type TextStats } from "@novel-lens/editor-core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
@@ -138,6 +138,7 @@ export function App(): ReactNode {
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [editorSession, setEditorSession] = useState<EditorSessionState>(() => defaultEditorSession());
   const [editorBuffers, setEditorBuffers] = useState<EditorBuffersState>(() => createEditorBuffers());
+  const [editorStats, setEditorStats] = useState<Record<string, TextStats>>({});
   const [isComposing, setIsComposing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -359,6 +360,14 @@ export function App(): ReactNode {
   useEffect(() => { activeNoteRef.current = activeNote; }, [activeNote]);
   useEffect(() => { noteDraftRef.current = noteDraft; }, [noteDraft]);
   useEffect(() => { editorRef.current = editorRefs.current[editorSession.activeGroupId] ?? null; }, [editorSession.activeGroupId, editorSession.groups.length]);
+
+  useEffect(() => {
+    const inputs = Object.entries(editorBuffers.buffers).map(([chapterId, buffer]) => [chapterId, buffer.text] as const);
+    const timer = window.setTimeout(() => {
+      setEditorStats(Object.fromEntries(inputs.map(([chapterId, value]) => [chapterId, textStats(value)])));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [editorBuffers.buffers]);
 
   const updateBufferText = useCallback((chapterId: string, value: string): void => {
     setEditorBuffers((current) => {
@@ -1872,7 +1881,7 @@ export function App(): ReactNode {
     const buffer = groupChapterId === null ? undefined : editorBuffers.buffers[groupChapterId];
     const groupActive = group.id === editorSession.activeGroupId;
     const groupIndex = manifestChapters.findIndex((item) => item.id === groupChapterId);
-    const groupStats = textStats(buffer?.text ?? "");
+    const groupStats = groupChapterId === null ? undefined : editorStats[groupChapterId];
     return <main
       key={group.id}
       className={`editor-pane manuscript-${theme} ${writingMode === "vertical-rl" ? "vertical" : "horizontal"} ${groupActive && findOpen ? "find-open" : ""} ${groupActive ? "active-group" : ""}`}
@@ -1939,7 +1948,7 @@ export function App(): ReactNode {
           placeholder="ここから物語を書き始めます。"
         />
       </div>
-      <footer className="statusbar"><span>{groupStats.charactersNoWhitespace.toLocaleString()}字</span><span>{groupStats.lines.toLocaleString()}行</span><span>{groupStats.words.toLocaleString()}語</span><select aria-label="原稿の配色" value={theme} onChange={(event) => void updateProjectSettings({ theme: event.target.value as ManuscriptTheme })}>{Object.entries(MANUSCRIPT_THEME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button onClick={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} title="横書きと縦書きを切り替える">{writingMode === "vertical-rl" ? "縦書き" : "横書き"}</button></footer>
+      <footer className="statusbar"><span>{groupStats?.charactersNoWhitespace.toLocaleString() ?? "—"}字</span><span>{groupStats?.lines.toLocaleString() ?? "—"}行</span><span>{groupStats?.words.toLocaleString() ?? "—"}語</span><select aria-label="原稿の配色" value={theme} onChange={(event) => void updateProjectSettings({ theme: event.target.value as ManuscriptTheme })}>{Object.entries(MANUSCRIPT_THEME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button onClick={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} title="横書きと縦書きを切り替える">{writingMode === "vertical-rl" ? "縦書き" : "横書き"}</button></footer>
     </main>;
   };
 
