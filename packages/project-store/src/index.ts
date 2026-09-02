@@ -9,7 +9,8 @@ export type { ReviewAnchor, ReviewAnchorStatus, ReviewFindingDetails, ReviewLedg
 
 export interface HistoryEntry { commit: string; authoredAt: string; subject: string }
 
-export interface Chapter { id: string; title: string; file: string; order: number }
+export type ChapterKind = "chapter" | "scene";
+export interface Chapter { id: string; title: string; file: string; order: number; kind?: ChapterKind }
 export interface ProjectSettings { writingMode?: "horizontal" | "vertical-rl"; font?: string; width?: number; lineHeight?: number; [key: string]: unknown }
 export interface ProjectManifest { schemaVersion: 1; title: string; chapters: Chapter[]; settings: ProjectSettings }
 export interface SearchResult { chapterId: string; title: string; file: string; start: number; end: number; excerpt: string }
@@ -20,7 +21,7 @@ export interface AppendReviewFindingInput { role: string; provider?: string; mod
 const MANIFEST = "novel-lens.json"; const MANUSCRIPT = "manuscript"; const INTERNAL = ".novel-editor"; const HISTORY = `${INTERNAL}/history`; const RECOVERY = `${INTERNAL}/recovery`; const SESSION = `${INTERNAL}/session.json`; const REVIEWS = `${INTERNAL}/reviews/ledger.json`;
 const safeId = (v: string) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}$/.test(v);
 function assertPath(root: string, p: string): string { const r = resolve(root, p); if (r !== resolve(root) && !r.startsWith(resolve(root) + "/") && !r.startsWith(resolve(root) + "\\")) throw new Error("managed path boundary violation"); return r; }
-function validate(m: ProjectManifest): void { if (m.schemaVersion !== 1 || !Array.isArray(m.chapters) || !m.chapters.every(c => safeId(c.id) && c.file === `${MANUSCRIPT}/${c.id}.md` && Number.isInteger(c.order))) throw new Error("invalid project manifest"); }
+function validate(m: ProjectManifest): void { if (m.schemaVersion !== 1 || !Array.isArray(m.chapters) || !m.chapters.every(c => safeId(c.id) && c.file === `${MANUSCRIPT}/${c.id}.md` && Number.isInteger(c.order) && (c.kind === undefined || c.kind === "chapter" || c.kind === "scene"))) throw new Error("invalid project manifest"); }
 async function atomic(path: string, data: string): Promise<void> { const tmp = `${path}.tmp-${process.pid}-${Date.now()}`; const handle = await open(tmp, "w"); try { await handle.writeFile(data, "utf8"); await handle.sync(); } finally { await handle.close(); } await rename(tmp, path); }
 function versionOf(text: string): string { return createHash("sha256").update(text, "utf8").digest("hex"); }
 async function readJsonIfPresent(path: string): Promise<unknown | null> { try { return JSON.parse(await readFile(path, "utf8")) as unknown; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } }
@@ -47,7 +48,7 @@ export class ProjectStore {
   async readRecoveryDraft(id: string): Promise<unknown | null> { const m = await load(this.root); if (!m.chapters.some(c => c.id === id)) throw new Error("chapter not found"); return readJsonIfPresent(assertPath(this.root, `${RECOVERY}/${id}.json`)); }
   async writeRecoveryDraft(id: string, draft: unknown): Promise<void> { const m = await load(this.root); if (!m.chapters.some(c => c.id === id)) throw new Error("chapter not found"); await mkdir(assertPath(this.root, RECOVERY), { recursive: true }); await atomic(assertPath(this.root, `${RECOVERY}/${id}.json`), JSON.stringify(draft, null, 2) + "\n"); }
   async clearRecoveryDraft(id: string): Promise<void> { if (!safeId(id)) throw new Error("invalid chapter id"); await rm(assertPath(this.root, `${RECOVERY}/${id}.json`), { force: true }); }
-  async createChapter(title: string, text = ""): Promise<Chapter> { const m = await load(this.root); const id = `chapter-${randomUUID().slice(0, 12)}`; const c = { id, title: title.trim() || id, file: `${MANUSCRIPT}/${id}.md`, order: m.chapters.length }; m.chapters.push(c); await atomic(assertPath(this.root, c.file), text); await saveManifest(this.root, m); return c; }
+  async createChapter(title: string, text = "", kind: ChapterKind = "chapter"): Promise<Chapter> { const m = await load(this.root); if (kind !== "chapter" && kind !== "scene") throw new Error("invalid chapter kind"); const id = `chapter-${randomUUID().slice(0, 12)}`; const c: Chapter = { id, title: title.trim() || id, file: `${MANUSCRIPT}/${id}.md`, order: m.chapters.length, kind }; m.chapters.push(c); await atomic(assertPath(this.root, c.file), text); await saveManifest(this.root, m); return c; }
   async renameChapter(id: string, title: string): Promise<void> { const m = await load(this.root); const c = m.chapters.find(x => x.id === id); if (!c) throw new Error("chapter not found"); c.title = title.trim() || c.title; await saveManifest(this.root, m); }
   async reorderChapters(ids: readonly string[]): Promise<void> { const m = await load(this.root); if (ids.length !== m.chapters.length || new Set(ids).size !== ids.length || ids.some(id => !m.chapters.some(c => c.id === id))) throw new Error("invalid chapter order"); const byId = new Map(m.chapters.map(c => [c.id, c])); m.chapters = ids.map((id, order) => ({ ...byId.get(id)!, order })); await saveManifest(this.root, m); }
   async renameProject(title: string): Promise<void> { const m = await load(this.root); const next = title.trim(); if (next.length === 0 || next.length > 200) throw new Error("invalid project title"); m.title = next; await saveManifest(this.root, m); }

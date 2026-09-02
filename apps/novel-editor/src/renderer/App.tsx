@@ -29,6 +29,7 @@ import {
 import type {
   AppInfo,
   ChapterDocument,
+  ChapterKind,
   CheckpointEntry,
   CodexModelOption,
   ConnectionStatus,
@@ -47,7 +48,7 @@ import type {
   SearchHit,
   UpdateStatus
 } from "../shared/types.js";
-import { defaultChapterTitle } from "../shared/chapter-title.js";
+import { defaultChapterTitle, defaultSceneTitle } from "../shared/chapter-title.js";
 import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
 import { EditorFindBar } from "./EditorFindBar.js";
@@ -179,6 +180,8 @@ export function App(): ReactNode {
   const [findMatchIndex, setFindMatchIndex] = useState(-1);
   const [editorTabDrag, setEditorTabDrag] = useState<EditorTabDragState | null>(null);
   const [editorTabDrop, setEditorTabDrop] = useState<EditorTabDropState | null>(null);
+  const [chapterDragId, setChapterDragId] = useState<string | null>(null);
+  const [chapterDropIndex, setChapterDropIndex] = useState<number | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const editorRefs = useRef<Partial<Record<EditorGroupId, HTMLTextAreaElement>>>({});
   const textRef = useRef("");
@@ -696,18 +699,19 @@ export function App(): ReactNode {
     return refreshed;
   }, [project]);
 
-  const addChapter = useCallback(async (): Promise<void> => {
+  const addChapter = useCallback(async (kind: ChapterKind = "chapter"): Promise<void> => {
     if (project === null) return;
+    const ordinal = manifestChapters.filter((item) => (item.kind ?? "chapter") === kind).length + 1;
     const title = await requestText({
-      title: "章・場面を追加",
+      title: kind === "scene" ? "場面を追加" : "章を追加",
       label: "タイトル",
-      initialValue: defaultChapterTitle(manifestChapters.length + 1),
+      initialValue: kind === "scene" ? defaultSceneTitle(ordinal) : defaultChapterTitle(ordinal),
       confirmLabel: "追加する"
     });
     if (title === null || title.trim().length === 0) return;
-    try { await saveNow(); const created = await window.novelLens.createChapter(project.root, title.trim()); await refreshProject(); await loadChapter(created.id); }
+    try { await saveNow(); const created = await window.novelLens.createChapter(project.root, title.trim(), kind); await refreshProject(); await loadChapter(created.id); }
     catch (cause) { setError(errorText(cause)); }
-  }, [loadChapter, manifestChapters.length, project, refreshProject, requestText, saveNow]);
+  }, [loadChapter, manifestChapters, project, refreshProject, requestText, saveNow]);
 
   const importDocuments = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -722,17 +726,37 @@ export function App(): ReactNode {
     } catch (cause) { setError(errorText(cause)); }
   }, [loadChapter, project, saveAllBuffers]);
 
-  const moveChapter = useCallback(async (delta: -1 | 1): Promise<void> => {
-    if (project === null || activeIndex < 0) return;
-    const destination = activeIndex + delta;
+  const moveChapterById = useCallback(async (chapterId: string, delta: -1 | 1): Promise<void> => {
+    if (project === null) return;
+    const index = manifestChapters.findIndex((item) => item.id === chapterId);
+    if (index < 0) return;
+    const destination = index + delta;
     if (destination < 0 || destination >= manifestChapters.length) return;
     const ids = manifestChapters.map((item) => item.id);
-    const current = ids[activeIndex]!;
-    ids[activeIndex] = ids[destination]!;
+    const current = ids[index]!;
+    ids[index] = ids[destination]!;
     ids[destination] = current;
     try { setProject(await window.novelLens.reorderChapters(project.root, ids)); }
     catch (cause) { setError(errorText(cause)); }
-  }, [activeIndex, manifestChapters, project]);
+  }, [manifestChapters, project]);
+
+  const moveChapter = useCallback(async (delta: -1 | 1): Promise<void> => {
+    if (activeChapterId !== null) await moveChapterById(activeChapterId, delta);
+  }, [activeChapterId, moveChapterById]);
+
+  const dropChapter = useCallback(async (boundaryIndex: number): Promise<void> => {
+    if (project === null || chapterDragId === null) return;
+    const ids = manifestChapters.map((item) => item.id);
+    const sourceIndex = ids.indexOf(chapterDragId);
+    if (sourceIndex < 0) return;
+    ids.splice(sourceIndex, 1);
+    const insertionIndex = Math.max(0, Math.min(ids.length, boundaryIndex > sourceIndex ? boundaryIndex - 1 : boundaryIndex));
+    ids.splice(insertionIndex, 0, chapterDragId);
+    setChapterDragId(null); setChapterDropIndex(null);
+    if (ids.every((id, index) => id === manifestChapters[index]?.id)) return;
+    try { setProject(await window.novelLens.reorderChapters(project.root, ids)); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [chapterDragId, manifestChapters, project]);
 
   const renameProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -1409,11 +1433,15 @@ export function App(): ReactNode {
         onContextMenu={(event) => { event.preventDefault(); openViewMenu("outline", event.clientX, event.clientY); }}
         onKeyDown={(event) => handleViewMenuKey("outline", event)}
         tabIndex={0}
-      ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="icon-button" title="章・場面を追加" onClick={addChapter}><AppIcon name="add" /></button></div></div>
-      <nav className="chapter-list" aria-label="章・場面">
-        {manifestChapters.map((item) => <button key={item.id} className={item.id === activeChapterId ? "chapter active" : "chapter"} onClick={() => void loadChapter(item.id)} disabled={busy}>
-          <span className="chapter-order">{String(item.order + 1).padStart(2, "0")}</span><span>{item.title}</span>
-        </button>)}
+      ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title="章を追加" onClick={() => void addChapter("chapter")}>＋章</button><button className="outline-add-button" title="場面を追加" onClick={() => void addChapter("scene")}>＋場面</button></div></div>
+      <nav className="chapter-list" aria-label="章・場面" onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
+        {manifestChapters.map((item, index) => {
+          const kind = item.kind ?? "chapter";
+          const dropClass = chapterDropIndex === index ? "drop-before" : chapterDropIndex === index + 1 ? "drop-after" : "";
+          return <button key={item.id} className={`${item.id === activeChapterId ? "chapter active" : "chapter"} ${kind === "scene" ? "scene" : ""} ${item.id === chapterDragId ? "drag-source" : ""} ${dropClass}`} onClick={() => void loadChapter(item.id)} disabled={busy} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setChapterDragId(item.id); setChapterDropIndex(null); }} onDragEnd={() => { setChapterDragId(null); setChapterDropIndex(null); }} onDragOver={(event) => { if (chapterDragId === null) return; event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setChapterDropIndex(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); void dropChapter(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; if (event.key === "ArrowUp") { event.preventDefault(); void moveChapterById(item.id, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); void moveChapterById(item.id, 1); } }} title={`${kind === "scene" ? "場面" : "章"}。ドラッグ、または Alt+Shift+↑/↓ で移動`}>
+            <span className="chapter-order">{String(item.order + 1).padStart(2, "0")}</span><span>{item.title}</span>{kind === "scene" && <small className="chapter-kind">場面</small>}
+          </button>;
+        })}
       </nav>
       <div className="outline-footer"><code title={project.root}>{project.root}</code><span>Markdown正本</span></div>
     </div>;

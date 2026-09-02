@@ -14,8 +14,8 @@ function underTenThousand(value: number): string {
   return result;
 }
 
-export function defaultChapterTitle(chapterNumber: number): string {
-  const normalized = Number.isFinite(chapterNumber) ? Math.max(1, Math.trunc(chapterNumber)) : 1;
+function japaneseNumeral(value: number): string {
+  const normalized = Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : 1;
   let remaining = normalized;
   let unitIndex = 0;
   let numeral = "";
@@ -25,5 +25,13 @@ export function defaultChapterTitle(chapterNumber: number): string {
     remaining = Math.floor(remaining / 10000);
     unitIndex += 1;
   }
-  return `第${numeral || DIGITS[1]}章`;
+  return numeral || DIGITS[1];
+}
+
+export function defaultChapterTitle(chapterNumber: number): string {
+  return `第${japaneseNumeral(chapterNumber)}章`;
+}
+
+export function defaultSceneTitle(sceneNumber: number): string {
+  return `場面${japaneseNumeral(sceneNumber)}`;
 }

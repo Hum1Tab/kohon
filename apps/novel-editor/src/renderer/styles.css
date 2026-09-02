@@ -228,12 +228,19 @@ body.is-resizing * { cursor: inherit !important; }
 .icon-button { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0; line-height: 1; }
 .pane-tools { display: flex; gap: 2px; }
 .import-button { font-size: 16px; }
+.outline-add-button { align-self: center; height: 26px; padding: 0 6px; color: var(--nl-muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 10px; }
+.outline-add-button:hover { color: var(--nl-text); background: var(--nl-accent-soft); border-color: color-mix(in srgb, var(--nl-accent) 24%, transparent); }
 .chapter-list { flex: 1; padding: 5px 8px; overflow: auto; }
-.chapter { width: 100%; display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 4px; margin: 2px 0; padding: 10px 8px; color: var(--nl-text); background: transparent; border: 1px solid transparent; border-radius: 7px; text-align: left; }
+.chapter { width: 100%; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 4px; margin: 2px 0; padding: 10px 8px; color: var(--nl-text); background: transparent; border: 1px solid transparent; border-radius: 7px; text-align: left; }
 .chapter:hover { background: var(--nl-surface-subtle); }
 .chapter.active { color: var(--nl-text); background: var(--nl-accent-soft); border-color: color-mix(in srgb, var(--nl-accent) 24%, transparent); font-weight: 700; }
 .chapter.active .chapter-order { color: var(--nl-accent); }
 .chapter-order { color: var(--nl-muted); font-family: ui-monospace, monospace; font-size: 10px; }
+.chapter.scene { padding-left: 15px; }
+.chapter-kind { color: var(--nl-gold); font-size: 8px; font-weight: 700; letter-spacing: .08em; }
+.chapter.drag-source { opacity: .45; }
+.chapter.drop-before { border-top-color: var(--nl-accent); }
+.chapter.drop-after { border-bottom-color: var(--nl-accent); }
 .outline-footer { padding: 12px; color: var(--nl-muted); border-top: 1px solid var(--nl-line); font-size: 10px; }
 .outline-footer code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

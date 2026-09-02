@@ -1,9 +1,9 @@
 import type { RoleId } from "@novel-lens/editor-core";
-import type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
+import type { Chapter, ChapterKind, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@novel-lens/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 import type { EditorSessionState } from "./editor-session.js";
 
-export type { Chapter, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
+export type { Chapter, ChapterKind, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
 export type { EditorSessionState } from "./editor-session.js";
 
@@ -196,7 +196,7 @@ export interface NovelLensApi {
   readRecoveryDraft(root: string, chapterId: string): Promise<RecoveryDraftResult | null>;
   writeRecoveryDraft(root: string, draft: RecoveryDraftInput): Promise<void>;
   clearRecoveryDraft(root: string, chapterId: string): Promise<void>;
-  createChapter(root: string, title: string): Promise<Chapter>;
+  createChapter(root: string, title: string, kind?: ChapterKind): Promise<Chapter>;
   importDocuments(root: string): Promise<ImportedDocumentSummary | null>;
   renameChapter(root: string, chapterId: string, title: string): Promise<void>;
   reorderChapters(root: string, chapterIds: string[]): Promise<ProjectSummary>;

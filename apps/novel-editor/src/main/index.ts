@@ -231,9 +231,10 @@ function registerIpc(): void {
     if (typeof chapterId !== "string") throw new Error("章IDが不正です。");
     await (await storeFor(root)).clearRecoveryDraft(chapterId);
   });
-  handle("chapter:create", async (root, title) => {
+  handle("chapter:create", async (root, title, kind) => {
     if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) throw new Error("章タイトルを確認してください。");
-    return (await storeFor(root)).createChapter(title);
+    if (kind !== undefined && kind !== "chapter" && kind !== "scene") throw new Error("章・場面の種類を確認してください。");
+    return (await storeFor(root)).createChapter(title, "", kind ?? "chapter");
   });
   handle("chapter:import", async (root) => {
     const store = await storeFor(root);
