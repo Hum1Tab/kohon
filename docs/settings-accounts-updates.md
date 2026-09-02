@@ -3,6 +3,8 @@
 更新日: 2026-09-01  
 対象: Novel Lens desktop v0.2.0
 
+> Historical snapshot. ChatGPT Codex sign-in, KOHON settings migration, and background Windows updates were implemented after this document. Use the README and `docs/INSTALL.md` for current behavior.
+
 ## 設定
 
 設定はVS Codeに近い二層構造にする。

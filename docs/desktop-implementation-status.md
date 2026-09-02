@@ -3,6 +3,8 @@
 更新日: 2026-08-31  
 対象: Novel Lens desktop v0.2.0
 
+> Historical snapshot. This document records the pre-KOHON v0.2.0 implementation. For the current product and release scope, use the repository README and `docs/kohon-rebuild-plan.md`.
+
 ## 実装済み
 
 - Electron security boundary: context isolation、sandbox、Node integration無効、permission拒否、外部navigation拒否

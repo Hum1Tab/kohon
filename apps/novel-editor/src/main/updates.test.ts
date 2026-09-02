@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checksumForAsset, chooseInstaller, compareVersions, installerLaunchArguments } from "./updates.js";
+import { checksumForAsset, chooseInstaller, compareVersions, installerLaunchArguments, isWindowsPortable } from "./updates.js";
 
 describe("desktop update selection", () => {
   it("detects a newer semantic version and selects only this repository's OS installer", () => {
@@ -24,5 +24,8 @@ describe("desktop update selection", () => {
   it("uses the NSIS silent update and restart flags only on Windows", () => {
     expect(installerLaunchArguments("win32")).toEqual(["/S", "--updated", "--force-run"]);
     expect(installerLaunchArguments("darwin")).toEqual([]);
+    expect(isWindowsPortable("win32", { PORTABLE_EXECUTABLE_FILE: "KOHON.exe" })).toBe(true);
+    expect(isWindowsPortable("win32", {})).toBe(false);
+    expect(isWindowsPortable("darwin", { PORTABLE_EXECUTABLE_FILE: "KOHON.exe" })).toBe(false);
   });
 });

@@ -76,6 +76,10 @@ export function installerLaunchArguments(platform: NodeJS.Platform): string[] {
   return platform === "win32" ? ["/S", "--updated", "--force-run"] : [];
 }
 
+export function isWindowsPortable(platform: NodeJS.Platform, environment: NodeJS.ProcessEnv): boolean {
+  return platform === "win32" && typeof environment["PORTABLE_EXECUTABLE_FILE"] === "string" && environment["PORTABLE_EXECUTABLE_FILE"].length > 0;
+}
+
 function checksumName(platform: NodeJS.Platform, architecture: string): string | null {
   const arch = architecture === "arm64" ? "arm64" : architecture === "x64" ? "x64" : null;
   if (arch === null) return null;

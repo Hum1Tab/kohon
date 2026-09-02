@@ -5,7 +5,7 @@
 
 ## 結論
 
-Novel Lensのcoreは、運営者がAPI key、GitHub token、原稿proxy、同期serverを持たなくても動く。運営側のAI・GitHubの従量課金を0円に固定する。ただし、署名付きinstaller、domain、store登録、サポート等の配布・運営費まで必ず0円になるという意味ではない。
+KOHON（旧Novel Lens）のcoreは、運営者がAPI key、GitHub token、原稿proxy、同期serverを持たなくても動く。運営側のAI・GitHubの従量課金を0円に固定する。ただし、署名付きinstaller、domain、store登録、サポート等の配布・運営費まで必ず0円になるという意味ではない。
 
 ## AI
 

@@ -9,6 +9,11 @@ on:
         description: "Existing v*.*.* tag to release"
         required: true
         type: string
+      publish:
+        description: "Publish an already verified draft without rebuilding"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -22,6 +27,7 @@ env:
 
 jobs:
   verify:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -50,6 +56,7 @@ jobs:
         run: pnpm audit --prod --audit-level high
 
   prepare:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -72,6 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   build:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
     needs: prepare
     strategy:
       fail-fast: false
@@ -196,10 +204,48 @@ jobs:
 
   publish:
     needs: build
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.publish && needs.build.result == 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Publish completed release
+      - name: Validate completed draft artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          release_json="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,assets)"
+          if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != "true" ]]; then
+            echo "Release is not an unpublished draft" >&2
+            exit 1
+          fi
+          names="$(jq -r '.assets[].name' <<<"${release_json}")"
+          required=(
+            "KOHON-${version}-windows-x64-setup.exe"
+            "KOHON-${version}-windows-x64-portable.exe"
+            "KOHON-${version}-mac-x64.dmg"
+            "KOHON-${version}-mac-x64.zip"
+            "KOHON-${version}-mac-arm64.dmg"
+            "KOHON-${version}-mac-arm64.zip"
+            "KOHON-${version}-linux-x64.AppImage"
+            "KOHON-${version}-linux-x64.deb"
+            "SHA256SUMS-windows-x64.txt"
+            "SHA256SUMS-macos-x64.txt"
+            "SHA256SUMS-macos-arm64.txt"
+            "SHA256SUMS-linux-x64.txt"
+            "THIRD_PARTY_LICENSES-windows-x64.json"
+            "THIRD_PARTY_LICENSES-macos-x64.json"
+            "THIRD_PARTY_LICENSES-macos-arm64.json"
+            "THIRD_PARTY_LICENSES-linux-x64.json"
+          )
+          for asset in "${required[@]}"; do
+            if ! grep -Fxq "${asset}" <<<"${names}"; then
+              echo "Missing release asset: ${asset}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish verified release
         run: gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest
         env:
           GH_TOKEN: ${{ github.token }}

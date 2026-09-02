@@ -1,49 +1,88 @@
-# Novel Lens
+# KOHON
 
-Novel Lensは、作者が所有するMarkdown原稿を正本にし、復元可能な保存点と根拠付きAIレンズを備えた、ローカル優先のOSS小説制作環境です。本文の自動生成や無断書換えを主導線にせず、作者が書き、読み返し、判断する仕事を支えます。
+**Your manuscript belongs to you.**<br>
+**Local-first. Markdown-native. Writing first.**<br>
+**AI reads; it does not take over.**<br>
+**Every AI finding can return to evidence in the manuscript.**
 
-## デスクトップ版でできること
+KOHONは、作者自身が書く時間を中心に置いた、日本語小説のためのオープンソース・デスクトップエディタです。本文の正本は利用者が選んだフォルダーのUTF-8 Markdown。AIが本文を勝手に書き換えることはなく、作者が確認した範囲だけを読み、引用できる根拠とともに見直しの材料を返します。
 
-- 章・場面の作成、改名、並べ替え、削除
-- UTF-8 TXT / Markdownの複数ファイル取り込み
-- 800msの自動保存と、終了直前の保存待ち
-- 横書き／直接縦書き、明朝・ゴシック・等幅、文字サイズ・行間・本文幅、3テーマ
-- 全章横断検索と該当箇所への移動
-- 名前を付けた保存点、安全な復元、別案フォルダーの作成
-- 結合Markdown書き出し
-- 初見読者、編集者、批評家、整合性確認、設定確認の5つの会話レンズ
-- current / currentまで / 全章から、AIへ送る範囲を毎回preview
-- Offline Mockと、利用者自身のAPIキーを使うOpenAI Responses API
-- AI引用のlocal完全一致検証。一意な根拠だけ原文へジャンプ
-- VS Code型の独立設定画面。ユーザー既定値と作品固有設定を分離
-- 競合を検出し、その場で変更できるキーボードショートカット
-- OpenAI APIキーの接続確認とOS保護領域への暗号化保存、公式GitHub CLI browser flowによるGitHubログイン
-- GitHub Releasesを使う自動更新確認と、OS別installerのdownload・SHA-256照合・起動
+Windows、macOS、Linuxに対応し、アカウントやAI接続がなくても執筆・検索・履歴・書き出しを利用できます。テレメトリはありません。
 
-APIキー、会話、AI raw responseはprojectへ保存しません。OpenAI利用時も`store:false`、toolなし、外部検索なし、自動retryなしで実行します。未選択章、ファイルpath、表示設定、履歴は送信しません。
+## KOHONが守ること
 
-ChatGPT Plus / ProとOpenAI APIは別契約です。本アプリはChatGPT web sessionを流用せず、利用者自身のAPI keyを接続確認後にOSの暗号化ストレージへ保存します（安全な保存先がない環境では起動中メモリのみ）。GitHubは`gh auth login --web`を利用し、Novel Lens自身はtokenを読みません。
+- 原稿、メモ、履歴は作者のローカルファイルです。
+- `manuscript/*.md`が本文の正本で、アプリがなくても読めます。
+- 自動保存、復旧稿、保存点、復元前の安全な保存点で、書いた内容を戻せます。
+- AIへ送る章と読了位置は毎回作者が確認します。
+- AI所見は原稿へ自動適用されません。解決・無視・再確認も作者が決めます。
+- 旧Novel Lens作品の`novel-lens.json`をそのまま開けます。強制改名や破壊的移行はしません。
+
+## 毎日の執筆に必要な機能
+
+- 複数の本文タブ、左右／上下の2分割、タブ移動、前回のタブ・caret・scroll復元
+- 横書き／直接縦書き、本文テーマ、フォント、文字サイズ、行間、本文幅
+- 章・場面のdrag & drop、分割、結合、任意の概要・POV・人物・場所・時系列・状態・tag
+- 現在の章の検索・置換、作品全体の検索・置換preview
+- Quick Open、Command Palette、変更可能なキーボードショートカット
+- VS Code型の左／右／下パネル配置、drag & drop、リサイズ、集中モード
+- 章へpinできる人物・場所・世界観・plot・資料などのMarkdownメモ
+- 名前付き保存点、現在との差分、保存点どうしの差分、章単位／作品全体の安全な復元、別案folder
+- ルビ、傍点、縦中横、鉤括弧、全角字下げ、句読点整形などの明示的な日本語入力補助
+- Markdown／TXT書き出し
+
+作品全体の置換前には自動で保存点を作ります。日本語入力補助はMarkdown互換の明示的な記法だけを挿入し、IME入力を自動で横取りしません。
+
+## Evidence-linked AI Lens
+
+初見読者、編集者、批評家、整合性確認、設定確認の5つの視点があります。`現在の章`、`現在の章まで`、`全章`から範囲を選び、「第8章まで読んだ読者」のように未来の章を見せない読了境界を保てます。
+
+AI所見はReview Ledgerへ保存され、role、provider/model、対象version、章、完全一致引用、anchor、作成時刻、状態を持ちます。根拠が変更された所見は、別の文章へ勝手に付け直さず`stale`として再確認を求めます。
+
+接続方法は次の3つです。
+
+- Offline Mock: ネット接続なしで画面と流れを確認
+- ChatGPTでCodexへログイン: 公式Codex App Serverのbrowser flowを使用し、subscription側のCodex accessを利用
+- OpenAI API key: 利用者自身のOpenAI Platform組織でusage-based accessを利用
+
+ChatGPT sign-inとAPI keyでは適用される契約・利用枠・data controlsが異なります。KOHONはこの2経路を混ぜません。詳細は[OpenAIの公式Authentication documentation](https://learn.chatgpt.com/docs/auth)を確認してください。
+
+API keyは接続確認後にOSの保護機能で暗号化して保存し、安全な保存先がない場合は起動中memoryだけに置きます。GitHub接続は公式GitHub CLIのbrowser flowを使い、KOHONはtoken値を読みません。AI会話とraw responseは作品folderへ保存しません。
 
 ## インストール
 
-[GitHub Releases](https://github.com/Hum1Tab/novel-lens/releases/latest)からOSに合うファイルを取得します。
+[GitHub Releases](https://github.com/Hum1Tab/kohon/releases/latest)からOSとCPUに合うKOHON 0.1.0を取得します。
 
 - Windows x64: setup `.exe` またはportable `.exe`
 - macOS: Intel / Apple Silicon用 `.dmg` または `.zip`
 - Linux x64: `.AppImage` または `.deb`
 
-公開前のsource build手順と、署名されていないpreview buildの注意は[インストール案内](./docs/INSTALL.md)を参照してください。
+checksum、署名状態、OS別の注意は[インストール案内](./docs/INSTALL.md)を参照してください。
 
-起動後は「設定 → 更新」から最新版を確認し、現在のOSとCPUに合うinstallerを1ボタンでdownload・SHA-256照合・起動できます。packaged版は起動時の更新確認も選択できます。作品は利用者が選んだフォルダーにあるため、更新や再installでは削除されません。
+### 作品を開く
 
-### 最初の作品を開く
+1. 「新しい作品を作る」で作品名と保存場所を指定します。新規作品には`kohon.json`を作成します。
+2. 旧Novel Lens作品は「作品フォルダーを開く」から既存の`novel-lens.json`を選択します。
 
-1. 初めて使う場合は「新しい作品を作る」を押し、作品名と保存場所を指定します。
-2. 以前の作品を開く場合は「作品フォルダーを開く」を押し、そのフォルダー内の`novel-lens.json`を選択します。
+本文はどちらも作品folderの`manuscript/*.md`です。
 
-本文は作品フォルダーの`manuscript/*.md`に保存されます。
+## データ形式
 
-## 開発・起動
+```text
+my-novel/
+├─ kohon.json              # 作品名、章順、作品固有設定
+├─ manuscript/
+│  ├─ chapter-....md       # 本文の正本
+│  └─ chapter-....md
+├─ notes/
+│  ├─ index.json
+│  └─ note-....md          # 作者所有のメモ
+└─ .novel-editor/          # schema 1互換のsession・復旧稿・保存点・Review Ledger
+```
+
+`.novel-editor`は旧作品との履歴互換性を守るため、KOHON 0.1.0でも同じ場所を使います。アプリ更新やuninstallで作品folderは削除されません。
+
+## 開発
 
 必要環境はNode.js 24.17系とpnpm 11.19系です。
 
@@ -53,52 +92,34 @@ pnpm build
 pnpm start
 ```
 
-Windows installerをlocalで作る場合:
-
-```powershell
-pnpm desktop:dist -- --win --x64
-```
-
-型検査、必要な回帰試験、production build:
+必要な型検査・回帰試験・production build:
 
 ```powershell
 pnpm check
 ```
 
-## データ形式
+Windows installerのlocal build:
 
-作品フォルダーはアプリなしでも読めます。
-
-```text
-my-novel/
-├─ novel-lens.json         # 作品名、章順、表示設定
-├─ manuscript/
-│  ├─ chapter-....md       # 本文の正本
-│  └─ chapter-....md
-└─ .novel-editor/
-   └─ history/             # local保存点
+```powershell
+pnpm desktop:dist -- --win --x64
 ```
-
-自動保存は同一フォルダー内のtemporary fileへ書き、flush後にrenameします。削除前と復元前には保存点を作り、復元操作そのものも取り消せる状態を残します。別案は独立フォルダーとして作成します。
 
 ## 構成
 
 |場所|責任|
 |---|---|
 |`apps/novel-editor`|Electron main/preload、React執筆UI、installer設定|
-|`packages/project-store`|plain Markdown project、atomic save、検索、保存点、復元、export|
-|`packages/editor-core`|5つのrole、本文統計、検索、exact quote検証|
-|`packages/lens-core`|snapshot、cutoff、anchor、安全境界|
-|`packages/provider-openai`|Gate A用BYOK OpenAI adapter|
-|`apps/gate-a-pilot`|generic回答とlensを比較する研究用companion|
+|`packages/project-store`|Markdown project、atomic save、検索、保存点、復元、notes、Review Ledger、export|
+|`packages/editor-core`|role、本文統計、検索、exact quote検証|
+|`packages/lens-core`|snapshot、read boundary、anchor、安全境界|
+|`packages/provider-openai`|利用者所有のOpenAI API接続|
+|`apps/gate-a-pilot`|generic回答とLensを比較した研究用companion|
 
-初期の市場調査、Gate A仕様、fixtureは研究記録として`docs/`、`research/`、`specs/`に残しています。現在の製品状態は[desktop implementation status](./docs/desktop-implementation-status.md)を正とします。
-
-設定、OpenAI/GitHub接続、更新境界の詳細は[設定・アカウント・更新の設計](./docs/settings-accounts-updates.md)にあります。
+初期調査と旧Novel Lens時点の設計記録は`docs/`、`research/`、`specs/`に履歴として残しています。現在の再構築方針は[KOHON rebuild plan](./docs/kohon-rebuild-plan.md)を参照してください。
 
 ## Release
 
-`v<major>.<minor>.<patch>` tagでGitHub ActionsがWindows、macOS Intel/Apple Silicon、Linuxのinstallerをbuildし、platform別SHA-256を添えてdraft releaseへuploadします。全matrix成功後だけReleaseを公開します。手順は[release guide](./docs/release.md)にあります。
+`v<major>.<minor>.<patch>` tagでGitHub ActionsがWindows、macOS Intel/Apple Silicon、Linuxのinstallerをnative buildし、SHA-256とproduction dependency license一覧を添付します。全matrix成功後だけdraft Releaseを公開します。手順は[release guide](./docs/release.md)にあります。
 
 ## Security / contribution / license
 

@@ -1,6 +1,24 @@
 # Changelog
 
-All notable changes to Novel Lens are documented here.
+All notable changes to KOHON are documented here.
+
+## 0.1.0 - Unreleased
+
+### Added
+
+- Added multiple manuscript tabs, two editor groups, horizontal/vertical split, tab restore, Quick Open, Command Palette, and configurable workbench docking.
+- Added IME-aware bounded undo/redo, visible crash-recovery drafts, current-document Find/Replace, and previewed project-wide replacement with an automatic checkpoint.
+- Added chapter/scene drag and drop, split/merge, optional metadata, and author-owned pinned Markdown notes.
+- Added checkpoint diff, checkpoint-to-checkpoint comparison, whole-project and chapter-only safe restore, and a persistent evidence-linked Review Ledger.
+- Added explicit Japanese indentation, quote, punctuation, ruby, emphasis, and tate-chu-yoko helpers while retaining Markdown as the canonical text.
+- Added ChatGPT Codex sign-in alongside OpenAI BYOK and Offline Mock, without automatic prose application.
+- Added KOHON product metadata, release artifacts, updater allowlist, `kohon.json` for new projects, and non-destructive settings/project compatibility with Novel Lens.
+
+### Verified
+
+- Production renderer/main/preload bundle, focused 100k-character editor-state benchmark, IPC sender validation, production dependency audit, and code-level accessibility audit.
+
+## Legacy Novel Lens history
 
 ## 0.2.0 - 2026-09-01
 

@@ -14,7 +14,7 @@ import { runLens, type LensExecutionInput } from "./lens.js";
 import type { ChapterDocument, LensRunInput, ProjectSummary, RecoveryDraft, RecoveryDraftInput } from "../shared/types.js";
 import { ConnectionManager } from "./connections.js";
 import { SecureCredentialStore } from "./secure-credentials.js";
-import { installerLaunchArguments, LATEST_RELEASE_PAGE, UpdateManager } from "./updates.js";
+import { installerLaunchArguments, isWindowsPortable, LATEST_RELEASE_PAGE, UpdateManager } from "./updates.js";
 import { migrateLegacyUserData } from "./user-data-migration.js";
 import { UserSettingsStore } from "./user-settings.js";
 
@@ -472,6 +472,10 @@ function registerIpc(): void {
   });
   handle("updates:install", async () => {
     if (updateManager === null) throw new Error("更新機能をまだ利用できません。");
+    if (isWindowsPortable(process.platform, process.env)) {
+      await shell.openExternal(LATEST_RELEASE_PAGE, { activate: true });
+      throw new Error("portable版は実行中のfileを自己置換しません。Releaseページから新しいportable版を取得してください。");
+    }
     const status = await updateManager.install(async (installerPath) => {
       if (process.platform === "linux" && installerPath.endsWith(".AppImage")) await chmod(installerPath, 0o700);
       if (process.platform === "win32") {

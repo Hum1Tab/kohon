@@ -1,5 +1,7 @@
 # Novel Lens ワークベンチ視覚システムと VS Code 型レイアウト
 
+> Historical design record for the Novel Lens v0.2.1 workbench. The implemented visual system was carried into KOHON; current product naming and release behavior are documented in the repository README.
+
 | 項目 | 内容 |
 |---|---|
 | 文書 | Novel Lens workbench visual system + dockable layout |

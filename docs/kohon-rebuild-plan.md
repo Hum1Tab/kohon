@@ -1,6 +1,6 @@
 # KOHON rebuild plan
 
-Status: implementation in progress. Product and repository names remain **Novel Lens** until every implementation, compatibility, license, and release gate below passes.
+Status: implementation and compatibility work is in final release audit. Source/product metadata now use **KOHON**, but no KOHON repository or public release is created until the remaining packaged-app, name-conflict, license, and release gates pass.
 
 ## Product contract
 

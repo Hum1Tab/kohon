@@ -1,5 +1,7 @@
 # Gate A implementation status
 
+> Historical Novel Lens / Gate A snapshot. Package names below intentionally preserve the names used when this research build was evaluated; current packages use the `@kohon/*` namespace.
+
 更新日: 2026-08-31  
 対象build: workspace source（public release前）  
 判定: **Mock-only local rehearsalは実行可能。Cloud参加者実験と製品本体は未承認。**

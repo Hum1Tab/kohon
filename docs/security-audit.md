@@ -18,6 +18,7 @@ Primary checklist: [Electron security recommendations](https://www.electronjs.or
 | External URLs | Fixed pages use a closed allowlist. Login URLs require HTTPS and OpenAI/ChatGPT hosts. Update pages and assets require exact GitHub repository/asset hosts and path patterns. |
 | Credentials | OpenAI keys use Electron `safeStorage`; Linux `basic_text` is rejected. The encrypted file is atomically written with mode `0600`. Keys are not stored in projects or settings. |
 | Updates | Installer size is capped at 512 MiB, host/path are allowlisted, and SHA-256 must match GitHub's asset digest or the matching release checksum file before launch. |
+| KOHON migration | The updater accepts only `Hum1Tab/kohon`. New projects use `kohon.json`; legacy manifests remain readable. Existing settings and encrypted credentials are copied only when the KOHON destination is absent, without deleting the source. |
 | Slow close | A four-second save timeout no longer closes silently. The author must choose either to keep waiting or explicitly force exit; recovery drafts remain available. |
 | Dependency scan | `pnpm audit --prod` reported no known vulnerabilities. `pnpm outdated electron --format json` reported no newer configured package on the audit date. |
 
@@ -26,5 +27,4 @@ Primary checklist: [Electron security recommendations](https://www.electronjs.or
 - The app still uses `file://`; a privileged custom protocol and Electron fuse hardening remain candidates for the final packaged audit.
 - Windows and macOS signing/notarization are not yet proven. SHA-256 verifies downloaded release bytes, but signing is still required for a stable trust chain.
 - `style-src 'unsafe-inline'` is retained for dynamic local styles; script execution remains restricted to self.
-- The KOHON rename must replace updater URL allowlists without ever accepting both repositories as arbitrary user input.
 - Run the audit again against the exact lockfile and packaged artifacts immediately before KOHON 0.1.0 publication.
