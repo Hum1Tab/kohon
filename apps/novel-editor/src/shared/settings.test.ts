@@ -4,7 +4,7 @@ import { bindingFromKeyboardEvent, defaultUserSettings, mergeUserSettings, norma
 
 describe("desktop user settings", () => {
   it("keeps workbench modes separate and validates custom manuscript colors", () => {
-    expect(defaultUserSettings().appearance.colorTheme).toBe("default");
+    expect(defaultUserSettings().appearance.colorTheme).toBe("light");
     const settings = sanitizeUserSettings({ appearance: { colorTheme: "light" }, editor: { theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" } });
     expect(settings.appearance.colorTheme).toBe("light");
     expect(settings.editor).toMatchObject({ theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" });

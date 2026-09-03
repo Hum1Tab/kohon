@@ -8,6 +8,7 @@ import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shar
 import { clearTextHistory, createEditorHistory, recordTextEdit, redoTextEdit, undoTextEdit, type EditOrigin, type TextSelection } from "../shared/editor-history.js";
 import { annotateSelectionAsTateChuYoko, insertParagraphIndent, isTateChuYokoCandidate, normalizeSelectedPunctuation, wrapSelectionWithBouten, wrapSelectionWithJapaneseQuotes, wrapSelectionWithRuby, type JapaneseInputResult, type TextareaSelection } from "../shared/japanese-input.js";
 import {
+  applyLayoutPreset,
   COMMAND_DEFINITIONS,
   defaultLayout,
   defaultUserSettings,
@@ -1150,7 +1151,7 @@ export function App(): ReactNode {
   }, []);
 
   const toggleColorTheme = useCallback((): void => {
-    void updateUserSettings({ appearance: { colorTheme: colorTheme === "dark" ? "default" : "dark" } });
+    void updateUserSettings({ appearance: { colorTheme: colorTheme === "dark" ? "light" : "dark" } });
   }, [colorTheme, updateUserSettings]);
 
   const commitLayout = useCallback((layout: LayoutPreferences, announcement?: string): void => {
@@ -1624,7 +1625,7 @@ export function App(): ReactNode {
     widthOverflow -= shrink;
   }
   if (widthOverflow > 0 && slotVisible("primary")) livePrimarySize -= Math.min(widthOverflow, Math.max(0, livePrimarySize - LAYOUT_LIMITS.primary.min));
-  const workspaceHeight = workspaceRef.current?.clientHeight ?? viewport.height - 64;
+  const workspaceHeight = workspaceRef.current?.clientHeight ?? viewport.height - 52;
   const liveBottomSize = Math.max(0, Math.min(layout.slots.bottom.size, workspaceHeight - EDITOR_SCROLL_MIN_HEIGHT - 98));
   const workspaceStyle = {
     gridTemplateColumns: columnAreas.map((area) => area === "activity" ? "var(--nl-activity, 52px)" : area === "primary" ? `${livePrimarySize}px` : area === "secondary" ? `${liveSecondarySize}px` : "minmax(430px, 1fr)").join(" "),
@@ -1704,12 +1705,13 @@ export function App(): ReactNode {
         onContextMenu={(event) => { event.preventDefault(); openViewMenu("outline", event.clientX, event.clientY); }}
         onKeyDown={(event) => handleViewMenuKey("outline", event)}
         tabIndex={0}
+        title="ドラッグで移動。Shift+F10で配置メニュー"
       ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" aria-label="TXTまたはMarkdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title="章を追加" onClick={() => void addChapter("chapter")}>＋章</button><button className="outline-add-button" title="場面を追加" onClick={() => void addChapter("scene")}>＋場面</button></div></div>
       <nav className="chapter-list" aria-label="章・場面" onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
         {manifestChapters.map((item, index) => {
           const kind = item.kind ?? "chapter";
           const dropClass = chapterDropIndex === index ? "drop-before" : chapterDropIndex === index + 1 ? "drop-after" : "";
-          return <button key={item.id} className={`${item.id === activeChapterId ? "chapter active" : "chapter"} ${kind === "scene" ? "scene" : ""} ${item.id === chapterDragId ? "drag-source" : ""} ${dropClass}`} onClick={() => void loadChapter(item.id)} disabled={busy} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setChapterDragId(item.id); setChapterDropIndex(null); }} onDragEnd={() => { setChapterDragId(null); setChapterDropIndex(null); }} onDragOver={(event) => { if (chapterDragId === null) return; event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setChapterDropIndex(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); void dropChapter(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; if (event.key === "ArrowUp") { event.preventDefault(); void moveChapterById(item.id, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); void moveChapterById(item.id, 1); } }} title={`${kind === "scene" ? "場面" : "章"}。ドラッグ、または Alt+Shift+↑/↓ で移動`}>
+          return <button key={item.id} aria-current={item.id === activeChapterId ? "page" : undefined} className={`${item.id === activeChapterId ? "chapter active" : "chapter"} ${kind === "scene" ? "scene" : ""} ${item.id === chapterDragId ? "drag-source" : ""} ${dropClass}`} onClick={() => void loadChapter(item.id)} disabled={busy} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setChapterDragId(item.id); setChapterDropIndex(null); }} onDragEnd={() => { setChapterDragId(null); setChapterDropIndex(null); }} onDragOver={(event) => { if (chapterDragId === null) return; event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setChapterDropIndex(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); void dropChapter(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; if (event.key === "ArrowUp") { event.preventDefault(); void moveChapterById(item.id, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); void moveChapterById(item.id, 1); } }} title={`${kind === "scene" ? "場面" : "章"}。ドラッグ、または Alt+Shift+↑/↓ で移動`}>
             <span className="chapter-order">{String(item.order + 1).padStart(2, "0")}</span><span>{item.title}</span>{kind === "scene" && <small className="chapter-kind">場面</small>}
           </button>;
         })}
@@ -1762,6 +1764,8 @@ export function App(): ReactNode {
           type="button"
           role="tab"
           aria-selected={activeView === view}
+          aria-controls={`view-panel-${slotId}`}
+          tabIndex={activeView === view ? 0 : -1}
           className={`view-tab ${activeView === view ? "active" : ""}`}
           data-view-tab={view}
           title={`${VIEW_LABELS[view]} — ドラッグまたは右クリックで移動`}
@@ -1772,11 +1776,11 @@ export function App(): ReactNode {
         ><span className="view-tab-grip" aria-hidden="true">⠿</span><AppIcon name={view === "outline" ? "files" : view} size={14} />{VIEW_LABELS[view]}</button>)}</div>
         <div className="view-tab-actions">
           {bottom && <button type="button" className="view-tab-action" aria-label={layout.bottomPanelMaximized ? "下部パネルを元の高さへ戻す" : "下部パネルを最大化"} title={layout.bottomPanelMaximized ? "元の高さへ戻す" : "最大化"} onClick={() => commitLayout({ ...layout, bottomPanelMaximized: !layout.bottomPanelMaximized })}><AppIcon name="focus" size={15} /></button>}
-          {activeView !== null && <button type="button" className="view-tab-action" aria-label="パネル操作" title="パネル操作" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openViewMenu(activeView, rect.right - 216, rect.bottom + 4); }}>…</button>}
+          {activeView !== null && <button type="button" className="view-tab-action" aria-label="パネル操作" title="配置とパネル操作" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openViewMenu(activeView, rect.right - 216, rect.bottom + 4); }}><AppIcon name="more" size={15} /></button>}
           <button type="button" className="view-tab-action" aria-label="パネルを閉じる" title="パネルを閉じる" onClick={() => commitLayout({ ...layout, bottomPanelMaximized: bottom ? false : layout.bottomPanelMaximized, slots: { ...layout.slots, [slotId]: { ...slot, visible: false } } }, "パネルを閉じました")}><AppIcon name="close" size={15} /></button>
         </div>
       </div>
-      <div className="view-slot-body">{activeView === null ? null : renderView(activeView)}</div>
+      <div className="view-slot-body" id={`view-panel-${slotId}`} role="tabpanel" aria-label={activeView === null ? "空のパネル" : VIEW_LABELS[activeView]}>{activeView === null ? null : renderView(activeView)}</div>
     </aside>;
   };
 
@@ -1924,11 +1928,12 @@ export function App(): ReactNode {
     const groupActive = group.id === editorSession.activeGroupId;
     const groupIndex = manifestChapters.findIndex((item) => item.id === groupChapterId);
     const groupStats = groupChapterId === null ? undefined : editorStats[groupChapterId];
-    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
+    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onSave={() => void saveAllBuffers()} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
   };
   return <div className={shellClass} style={shellStyle}><div className={`app ${layout.zenMode ? "zen-mode" : ""}`}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><AppIcon name="logo" size={22} /></span><div><b>KOHON</b><button className="project-title" onClick={renameProject} title="作品名を変更">{project.manifest.title}</button></div></div>
+      <button type="button" className="top-command" onClick={() => openQuickAccess("commands")} title="コマンド パレットを開く"><AppIcon name="search" size={15} /><span>操作を検索</span><kbd>{formatKeybinding(userSettings.keybindings["workbench.commandPalette"])}</kbd></button>
       <div className="top-actions">
         <button className="ghost action-with-icon" onClick={createCheckpoint} title="現在の状態を保存点にする"><AppIcon name="checkpoint" />保存点</button>
         <button className="ghost action-with-icon" onClick={exportProject} title="Markdownを書き出す"><AppIcon name="export" />書き出し</button>
@@ -1936,7 +1941,12 @@ export function App(): ReactNode {
         <div className="layout-menu-anchor">
           <button className={`icon-button top-icon ${layoutMenuOpen ? "active" : ""}`} onClick={() => setLayoutMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={layoutMenuOpen} aria-label="レイアウトを変更" title="レイアウト"><AppIcon name="layout" /></button>
           {layoutMenuOpen && <div className="layout-quick-menu" role="menu">
-            <strong>WORKBENCH LAYOUT</strong>
+            <strong>作業レイアウト</strong>
+            <div className="layout-menu-section"><span>すぐ切り替える</span><div className="layout-preset-grid">
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "writing"), "執筆レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>執筆</button>
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "review"), "推敲レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>推敲</button>
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "compare"), "比較レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>比較</button>
+            </div></div>
             <div className="layout-menu-section"><span>表示</span>
               <button role="menuitemcheckbox" aria-checked={layout.activityBarVisible} onClick={() => commitLayout({ ...layout, activityBarVisible: !layout.activityBarVisible, zenMode: false })}><b>{layout.activityBarVisible ? "✓" : ""}</b>アクティビティバー</button>
               {(["primary", "secondary", "bottom"] as const).map((slot) => <button key={slot} role="menuitemcheckbox" aria-checked={layout.slots[slot].visible} onClick={() => toggleSlotVisibility(slot)}><b>{layout.slots[slot].visible ? "✓" : ""}</b>{slot === "primary" ? "メインパネル" : slot === "secondary" ? "補助パネル" : "下部パネル"}</button>)}
@@ -1946,7 +1956,6 @@ export function App(): ReactNode {
             <span className="menu-separator" /><button role="menuitem" onClick={() => { commitLayout(defaultLayout(), "レイアウトを既定へ戻しました"); setLayoutMenuOpen(false); }}><b>↺</b>既定に戻す</button>
           </div>}
         </div>
-        <span className={`save-indicator ${saveState}`}>{saveState === "saved" ? "保存済み" : saveState === "saving" ? "保存中…" : saveState === "dirty" ? "未保存" : "保存エラー"}</span>
       </div>
     </header>
 
@@ -1966,16 +1975,17 @@ export function App(): ReactNode {
             return <button
               key={view}
               className={`activity-button ${active ? "active" : ""}`}
+              aria-pressed={active}
               onClick={() => { if (!suppressDockClickRef.current) toggleView(view); }}
               onPointerDown={(event) => beginDockDrag(view, event)}
               onContextMenu={(event) => { event.preventDefault(); openViewMenu(view, event.clientX, event.clientY); }}
               onKeyDown={(event) => handleViewMenuKey(view, event)}
               title={`${VIEW_LABELS[view]}（ドラッグで移動）`}
               aria-label={VIEW_LABELS[view]}
-            ><AppIcon name={view === "outline" ? "files" : view} /></button>;
+            ><AppIcon name={view === "outline" ? "files" : view} /><span className="activity-label" aria-hidden="true">{VIEW_LABELS[view]}</span></button>;
           })}
         </div>
-        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title="設定" aria-label="設定を開く"><AppIcon name="settings" /></button></div>
+        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title="設定" aria-label="設定を開く"><AppIcon name="settings" /><span className="activity-label" aria-hidden="true">設定</span></button></div>
       </aside>}
 
       {renderSlot("primary")}

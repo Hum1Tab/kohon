@@ -9,7 +9,7 @@ import {
 } from "./layout.js";
 import { isHexColor, MANUSCRIPT_PALETTES, type ManuscriptTheme } from "./editor-theme.js";
 
-export { defaultLayout, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, LAYOUT_LIMITS, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, placeViewOnSide, projectLayoutV1, sanitizeLayout, sideOf, slotOf, TOOL_VIEWS, VIEW_IDS } from "./layout.js";
+export { applyLayoutPreset, defaultLayout, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, LAYOUT_LIMITS, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, placeViewOnSide, projectLayoutV1, sanitizeLayout, sideOf, slotOf, TOOL_VIEWS, VIEW_IDS } from "./layout.js";
 export type { BottomPanelAlignment, DockSlotState, LayoutPatch, LayoutPreferences, PhysicalSide, SlotId, ViewId } from "./layout.js";
 
 export type AppCommandId =
@@ -157,7 +157,7 @@ export function defaultUserSettings(): UserSettings {
   return {
     schemaVersion: 3,
     general: { autoSaveDelayMs: 800 },
-    appearance: { colorTheme: "default", accent: "forest", density: "comfortable" },
+    appearance: { colorTheme: "light", accent: "forest", density: "comfortable" },
     layout: defaultLayout(),
     editor: { writingMode: "horizontal", theme: "paper", canvasBackground: MANUSCRIPT_PALETTES.paper.background, canvasText: null, font: DEFAULT_FONT, fontSize: 18, lineHeight: 2, width: 760 },
     ai: { defaultProvider: "codex", codexModel: "gpt-5.6-luna", openaiModel: "gpt-5.6-luna" },

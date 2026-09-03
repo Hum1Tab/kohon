@@ -2,6 +2,18 @@
 
 All notable changes to KOHON are documented here.
 
+## Unreleased
+
+### Improved
+
+- Added one-click Writing, Review, and Compare workbench layouts without discarding the author's chosen panel side or size.
+- Made Command Palette access visible in the title area and made Activity Bar destinations understandable without memorizing icons.
+- Moved document save state beside manuscript statistics and made it an immediate Save action.
+- Moved the AI Lens question and reading-position controls before prior results, keeping the next action reachable in long sessions.
+- Reduced decorative chrome and vertical toolbar space so the manuscript remains the visual center.
+- Made white the default workbench theme while retaining paper and dark as explicit choices.
+- Improved Settings search for multi-word Japanese queries and strengthened tab/panel accessibility relationships.
+
 ## 0.1.0 - 2026-09-03
 
 ### Added

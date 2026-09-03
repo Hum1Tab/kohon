@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyLayoutPreset,
   defaultLayout,
   mergeLayout,
   migrateLayoutV1,
@@ -47,5 +48,18 @@ describe("layout schema v2", () => {
   it("is idempotent for a complete layout", () => {
     const layout: LayoutPreferences = defaultLayout();
     expect(sanitizeLayout(layout as unknown as Record<string, unknown>)).toEqual(layout);
+  });
+
+  it("applies task presets without discarding side choices or resized dimensions", () => {
+    const current = defaultLayout();
+    current.primarySide = "right";
+    current.slots.primary.size = 318;
+    const writing = applyLayoutPreset(current, "writing");
+    expect(writing.primarySide).toBe("right");
+    expect(writing.slots.primary).toMatchObject({ views: ["outline"], visible: true, size: 318 });
+    expect(writing.slots.secondary.visible).toBe(false);
+    const compare = applyLayoutPreset(current, "compare");
+    expect(compare.slots.bottom).toMatchObject({ views: ["history"], activeView: "history", visible: true });
+    expect(compare.slots.secondary).toMatchObject({ views: ["lens", "search"], activeView: "search", visible: true });
   });
 });
