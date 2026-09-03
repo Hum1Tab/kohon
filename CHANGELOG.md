@@ -2,7 +2,12 @@
 
 All notable changes to KOHON are documented here.
 
-## Unreleased
+## 0.1.1 - 2026-09-03
+
+### Added
+
+- Added Japanese, English, and operating-system language choices in Settings, covering the workbench, native menus, dialogs, connection states, update states, and default chapter/scene names.
+- Added a Japanese/English language selector to the Windows installer.
 
 ### Improved
 

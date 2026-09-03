@@ -1,10 +1,12 @@
 import type { RoleId } from "@kohon/editor-core";
 import type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@kohon/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+import type { AppLanguage, AppLocale } from "./locale.js";
 import type { EditorSessionState } from "./editor-session.js";
 
 export type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+export type { AppLanguage, AppLocale } from "./locale.js";
 export type { EditorSessionState } from "./editor-session.js";
 
 export interface ProjectSummary {

@@ -10,6 +10,8 @@ import { isHexColor } from "../shared/editor-theme.js";
 import { sanitizeEditorSession } from "../shared/editor-session.js";
 import { resolveLensScope } from "../shared/lens-scope.js";
 import { COMMAND_DEFINITIONS, defaultUserSettings, toElectronAccelerator, type AppCommandId, type UserSettings } from "../shared/settings.js";
+import { commandLabel, resolveAppLocale, uiText, type AppLocale } from "../shared/locale.js";
+import { defaultChapterTitle } from "../shared/chapter-title.js";
 import { runLens, type LensExecutionInput } from "./lens.js";
 import type { ChapterDocument, LensRunInput, ProjectSummary, RecoveryDraft, RecoveryDraftInput } from "../shared/types.js";
 import { ConnectionManager } from "./connections.js";
@@ -46,11 +48,11 @@ function workbenchBackgroundColor(): string {
 }
 
 function suggestedFolderName(title: string): string {
-  return title.replace(/[<>:"/\\|?*\u0000-\u001F]/gu, "-").replace(/[. ]+$/u, "").trim() || "新しい小説";
+  return title.replace(/[<>:"/\\|?*\u0000-\u001F]/gu, "-").replace(/[. ]+$/u, "").trim() || mainText("新しい小説");
 }
 
 function safeMessage(error: unknown): string {
-  if (!(error instanceof Error)) return "処理を完了できませんでした。";
+  if (!(error instanceof Error)) return mainText("処理を完了できませんでした。");
   const message = error.message.replace(/[\r\n\u0000]+/gu, " ").slice(0, 500);
   const translations: Record<string, string> = {
     "chapter not found": "章が見つかりません。",
@@ -58,7 +60,7 @@ function safeMessage(error: unknown): string {
     "managed path boundary violation": "project外のファイル操作を拒否しました。",
     "invalid snapshot id": "保存点を確認できません。"
   };
-  return translations[message] ?? message;
+  return mainText(translations[message] ?? message);
 }
 
 function recoveryDraftFrom(value: unknown, expectedChapterId: string): RecoveryDraft {
@@ -127,10 +129,10 @@ async function summary(store: ProjectStore): Promise<ProjectSummary> {
 async function chooseNewProject(title: unknown): Promise<ProjectSummary | null> {
   if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) throw new Error("作品名は1〜200文字で入力してください。");
   const selected = await dialog.showSaveDialog(mainWindow!, {
-    title: "新しい作品フォルダーの保存場所を選択",
+    title: mainText("新しい作品フォルダーの保存場所を選択"),
     defaultPath: join(app.getPath("documents"), suggestedFolderName(title.trim())),
-    buttonLabel: "ここに作品を作成",
-    nameFieldLabel: "作品フォルダー名:",
+    buttonLabel: mainText("ここに作品を作成"),
+    nameFieldLabel: mainText("作品フォルダー名:"),
     properties: ["createDirectory", "showOverwriteConfirmation"]
   });
   if (selected.canceled || selected.filePath.length === 0) return null;
@@ -142,18 +144,18 @@ async function chooseNewProject(title: unknown): Promise<ProjectSummary | null> 
     await mkdir(root, { recursive: true });
   }
   const store = await ProjectStore.create(root, title.trim());
-  await store.createChapter("第一章", "");
+  await store.createChapter(defaultChapterTitle(1, currentLocale()), "");
   await registerRoot(root);
-  await store.checkpoint("最初の保存点");
+  await store.checkpoint(mainText("最初の保存点"));
   return summary(store);
 }
 
 async function chooseExistingProject(): Promise<ProjectSummary | null> {
   const selected = await dialog.showOpenDialog(mainWindow!, {
-    title: `作品フォルダー内の ${PROJECT_MANIFEST} または ${LEGACY_PROJECT_MANIFEST} を選択`,
+    title: currentLocale() === "en" ? `Select ${PROJECT_MANIFEST} or ${LEGACY_PROJECT_MANIFEST} inside the project folder` : `作品フォルダー内の ${PROJECT_MANIFEST} または ${LEGACY_PROJECT_MANIFEST} を選択`,
     defaultPath: app.getPath("documents"),
-    buttonLabel: "この作品を開く",
-    filters: [{ name: `KOHON作品 (${PROJECT_MANIFEST} / ${LEGACY_PROJECT_MANIFEST})`, extensions: ["json"] }],
+    buttonLabel: mainText("この作品を開く"),
+    filters: [{ name: currentLocale() === "en" ? `KOHON Project (${PROJECT_MANIFEST} / ${LEGACY_PROJECT_MANIFEST})` : `KOHON作品 (${PROJECT_MANIFEST} / ${LEGACY_PROJECT_MANIFEST})`, extensions: ["json"] }],
     properties: ["openFile"]
   });
   const selectedPath = selected.filePaths[0];
@@ -256,8 +258,8 @@ function registerIpc(): void {
   handle("chapter:import", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showOpenDialog(mainWindow!, {
-      title: "TXT / Markdownを章・場面として取り込む",
-      buttonLabel: "取り込む",
+      title: mainText("TXT / Markdownを章・場面として取り込む"),
+      buttonLabel: mainText("取り込む"),
       properties: ["openFile", "multiSelections"],
       filters: [{ name: "Text / Markdown", extensions: ["txt", "md", "markdown"] }]
     });
@@ -368,9 +370,9 @@ function registerIpc(): void {
   handle("project:variation", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showSaveDialog(mainWindow!, {
-      title: "別案を新しいフォルダーへ作成",
+      title: mainText("別案を新しいフォルダーへ作成"),
       defaultPath: `${basename(store.root)}-別案`,
-      buttonLabel: "別案を作成",
+      buttonLabel: mainText("別案を作成"),
       properties: ["createDirectory", "showOverwriteConfirmation"]
     });
     if (selected.canceled || selected.filePath.length === 0) return null;
@@ -380,9 +382,9 @@ function registerIpc(): void {
   handle("project:export", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showSaveDialog(mainWindow!, {
-      title: "作品を結合Markdownとして書き出す",
+      title: mainText("作品を結合Markdownとして書き出す"),
       defaultPath: join(dirname(store.root), `${basename(store.root)}.md`),
-      buttonLabel: "書き出す",
+      buttonLabel: mainText("書き出す"),
       filters: [{ name: "Markdown", extensions: ["md"] }]
     });
     if (selected.canceled || selected.filePath.length === 0) return null;
@@ -392,9 +394,9 @@ function registerIpc(): void {
   handle("project:export-text", async (root) => {
     const store = await storeFor(root);
     const selected = await dialog.showSaveDialog(mainWindow!, {
-      title: "作品を結合テキストとして書き出す",
+      title: mainText("作品を結合テキストとして書き出す"),
       defaultPath: join(dirname(store.root), `${basename(store.root)}.txt`),
-      buttonLabel: "書き出す",
+      buttonLabel: mainText("書き出す"),
       filters: [{ name: "Text", extensions: ["txt"] }]
     });
     if (selected.canceled || selected.filePath.length === 0) return null;
@@ -528,10 +530,10 @@ async function confirmSlowClose(): Promise<void> {
   if (window === null || window.isDestroyed() || closeApproved) return;
   const result = await dialog.showMessageBox(window, {
     type: "warning",
-    title: "保存の完了を待っています",
-    message: "原稿の保存処理がまだ完了していません。",
-    detail: "通常は「保存を待つ」を選んでください。強制終了すると、最後の入力は復旧ドラフトから戻す必要があります。",
-    buttons: ["保存を待つ", "強制終了"],
+    title: mainText("保存の完了を待っています"),
+    message: mainText("原稿の保存処理がまだ完了していません。"),
+    detail: mainText("通常は「保存を待つ」を選んでください。強制終了すると、最後の入力は復旧ドラフトから戻す必要があります。"),
+    buttons: [mainText("保存を待つ"), mainText("強制終了")],
     defaultId: 0,
     cancelId: 0,
     noLink: true
@@ -550,16 +552,24 @@ function sendMenuAction(action: AppCommandId): void {
   mainWindow?.webContents.send("menu:action", action);
 }
 
+function currentLocale(): AppLocale {
+  return resolveAppLocale(userSettings.general.language, app.getLocale());
+}
+
+function mainText(japanese: string): string {
+  return uiText(currentLocale(), japanese);
+}
+
 function commandMenuItem(id: AppCommandId, label?: string, includeAccelerator = true): MenuItemConstructorOptions {
   const definition = COMMAND_DEFINITIONS.find((item) => item.id === id)!;
   const accelerator = !includeAccelerator || keybindingRecording ? undefined : toElectronAccelerator(userSettings.keybindings[id]);
-  return { label: label ?? definition.label, click: () => sendMenuAction(id), ...(accelerator === undefined ? {} : { accelerator }) };
+  return { label: label ?? commandLabel(definition, currentLocale()), click: () => sendMenuAction(id), ...(accelerator === undefined ? {} : { accelerator }) };
 }
 
 function installMenu(): void {
   const template: MenuItemConstructorOptions[] = [
     {
-      label: "ファイル",
+      label: mainText("ファイル"),
       submenu: [
         commandMenuItem("file.new"),
         commandMenuItem("file.open"),
@@ -569,13 +579,13 @@ function installMenu(): void {
         commandMenuItem("file.export"),
         commandMenuItem("file.exportText"),
         { type: "separator" },
-        { role: process.platform === "darwin" ? "close" : "quit" }
+        { role: process.platform === "darwin" ? "close" : "quit", label: mainText(process.platform === "darwin" ? "閉じる" : "終了") }
       ]
     },
-    { label: "編集", submenu: [commandMenuItem("editor.find"), commandMenuItem("editor.replace"), { type: "separator" }, { label: "小説向け入力", submenu: [commandMenuItem("editor.ruby"), commandMenuItem("editor.emphasis"), commandMenuItem("editor.normalizePunctuation"), commandMenuItem("editor.indentedParagraph"), commandMenuItem("editor.japaneseQuotes"), commandMenuItem("editor.tateChuYoko")] }, { label: "構成編集", submenu: [commandMenuItem("editor.splitScene"), commandMenuItem("editor.mergePrevious")] }, { type: "separator" }, commandMenuItem("editor.undo"), commandMenuItem("editor.redo"), { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
-    { label: "設定", submenu: [commandMenuItem("view.settings", "設定を開く…"), { type: "separator" }, commandMenuItem("view.settings.appearance"), commandMenuItem("view.settings.layout"), commandMenuItem("view.settings.editor"), commandMenuItem("view.settings.ai"), commandMenuItem("view.settings.accounts"), commandMenuItem("view.settings.keyboard"), commandMenuItem("view.settings.updates")] },
-    { label: "表示", submenu: [commandMenuItem("workbench.commandPalette"), commandMenuItem("workbench.quickOpen"), { type: "separator" }, commandMenuItem("editor.splitRight"), commandMenuItem("editor.splitDown"), commandMenuItem("editor.closeGroup"), { label: "エディター タブ", submenu: [commandMenuItem("editor.moveTabLeft"), commandMenuItem("editor.moveTabRight"), commandMenuItem("editor.moveTabToOtherGroup")] }, { type: "separator" }, commandMenuItem("view.outline"), commandMenuItem("view.lens"), commandMenuItem("view.search"), commandMenuItem("view.history"), { type: "separator" }, commandMenuItem("view.zen"), commandMenuItem("layout.reset"), { type: "separator" }, { role: "togglefullscreen" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
-    { label: "ヘルプ", submenu: [commandMenuItem("updates.check"), { label: "GitHub Releasesを開く", click: () => { void openExternalPage("latest-release"); } }] }
+    { label: mainText("編集"), submenu: [commandMenuItem("editor.find"), commandMenuItem("editor.replace"), { type: "separator" }, { label: mainText("小説向け入力"), submenu: [commandMenuItem("editor.ruby"), commandMenuItem("editor.emphasis"), commandMenuItem("editor.normalizePunctuation"), commandMenuItem("editor.indentedParagraph"), commandMenuItem("editor.japaneseQuotes"), commandMenuItem("editor.tateChuYoko")] }, { label: mainText("構成編集"), submenu: [commandMenuItem("editor.splitScene"), commandMenuItem("editor.mergePrevious")] }, { type: "separator" }, commandMenuItem("editor.undo"), commandMenuItem("editor.redo"), { type: "separator" }, { role: "cut", label: mainText("切り取り") }, { role: "copy", label: mainText("コピー") }, { role: "paste", label: mainText("貼り付け") }, { role: "selectAll", label: mainText("すべて選択") }] },
+    { label: mainText("設定"), submenu: [commandMenuItem("view.settings", mainText("設定を開く…")), { type: "separator" }, commandMenuItem("view.settings.appearance"), commandMenuItem("view.settings.layout"), commandMenuItem("view.settings.editor"), commandMenuItem("view.settings.ai"), commandMenuItem("view.settings.accounts"), commandMenuItem("view.settings.keyboard"), commandMenuItem("view.settings.updates")] },
+    { label: mainText("表示"), submenu: [commandMenuItem("workbench.commandPalette"), commandMenuItem("workbench.quickOpen"), { type: "separator" }, commandMenuItem("editor.splitRight"), commandMenuItem("editor.splitDown"), commandMenuItem("editor.closeGroup"), { label: mainText("エディター タブ"), submenu: [commandMenuItem("editor.moveTabLeft"), commandMenuItem("editor.moveTabRight"), commandMenuItem("editor.moveTabToOtherGroup")] }, { type: "separator" }, commandMenuItem("view.outline"), commandMenuItem("view.lens"), commandMenuItem("view.search"), commandMenuItem("view.history"), { type: "separator" }, commandMenuItem("view.zen"), commandMenuItem("layout.reset"), { type: "separator" }, { role: "togglefullscreen", label: mainText("全画面表示を切り替える") }, { role: "resetZoom", label: mainText("表示倍率をリセット") }, { role: "zoomIn", label: mainText("拡大") }, { role: "zoomOut", label: mainText("縮小") }] },
+    { label: mainText("ヘルプ"), submenu: [commandMenuItem("updates.check"), { label: mainText("GitHub Releasesを開く"), click: () => { void openExternalPage("latest-release"); } }] }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

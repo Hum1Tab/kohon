@@ -7,6 +7,8 @@
 - `KOHON-<version>-windows-x64-setup.exe`: 通常installとアプリ内更新に対応
 - `KOHON-<version>-windows-x64-portable.exe`: installせず単体起動
 
+setup版は起動時に日本語またはEnglishを選べます。KOHON本体の表示言語は初回起動時にOSへ合わせ、後から「設定 → 全般 → 表示言語」でいつでも変更できます。
+
 署名されていないbuildではSmartScreenの警告が表示されます。Release本文の署名状態とchecksumを確認し、出所を確認できないbuildは実行しないでください。
 
 ## macOS Intel / Apple Silicon

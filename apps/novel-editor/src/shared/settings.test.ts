@@ -5,10 +5,17 @@ import { bindingFromKeyboardEvent, defaultUserSettings, mergeUserSettings, norma
 describe("desktop user settings", () => {
   it("keeps workbench modes separate and validates custom manuscript colors", () => {
     expect(defaultUserSettings().appearance.colorTheme).toBe("light");
+    expect(defaultUserSettings().general.language).toBe("system");
     const settings = sanitizeUserSettings({ appearance: { colorTheme: "light" }, editor: { theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" } });
     expect(settings.appearance.colorTheme).toBe("light");
     expect(settings.editor).toMatchObject({ theme: "custom", canvasBackground: "#203040", canvasText: "#f0f0f0" });
     expect(sanitizeUserSettings({ editor: { theme: "custom", canvasBackground: "red" } }).editor.canvasBackground).toBe("#fffefa");
+  });
+
+  it("migrates and validates the application language", () => {
+    expect(sanitizeUserSettings({ schemaVersion: 3, general: { autoSaveDelayMs: 900 } }).general.language).toBe("system");
+    expect(sanitizeUserSettings({ schemaVersion: 4, general: { language: "en" } }).general.language).toBe("en");
+    expect(sanitizeUserSettings({ schemaVersion: 4, general: { language: "invalid" } }).general.language).toBe("system");
   });
 
   it("keeps editable keybindings portable, unique, and away from editor-reserved keys", () => {
@@ -22,11 +29,11 @@ describe("desktop user settings", () => {
 
   it("migrates v1 layout fields and writes a v1 compatibility mirror", () => {
     const settings = sanitizeUserSettings({ schemaVersion: 1, layout: { primarySidebar: "right", inspector: "bottom", showInspector: false } });
-    expect(settings.schemaVersion).toBe(3);
+    expect(settings.schemaVersion).toBe(4);
     expect(settings.layout.primarySide).toBe("right");
     expect(settings.layout.slots.bottom.visible).toBe(false);
     const serialized = JSON.parse(serializeUserSettings(settings)) as { schemaVersion: number; layout: Record<string, unknown> };
-    expect(serialized.schemaVersion).toBe(3);
+    expect(serialized.schemaVersion).toBe(4);
     expect(serialized.layout["primarySidebar"]).toBe("right");
     expect(serialized.layout["inspector"]).toBe("bottom");
     expect(serialized.layout["slots"]).toBeDefined();

@@ -1,6 +1,6 @@
 {
   "name": "@kohon/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "作者所有のMarkdown原稿、復元可能な履歴、根拠付きAIレンズを備えた日本語小説制作環境",
   "author": "KOHON contributors",
   "homepage": "https://github.com/Hum1Tab/kohon",
@@ -82,6 +82,9 @@
     "nsis": {
       "artifactName": "KOHON-${version}-windows-${arch}-setup.${ext}",
       "oneClick": false,
+      "multiLanguageInstaller": true,
+      "installerLanguages": ["ja_JP", "en_US"],
+      "displayLanguageSelector": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,

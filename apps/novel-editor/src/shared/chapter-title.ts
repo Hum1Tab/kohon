@@ -1,3 +1,5 @@
+import type { AppLocale } from "./locale.js";
+
 const DIGITS = ["〇", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
 const LARGE_UNITS = ["", "万", "億", "兆", "京"] as const;
 
@@ -28,10 +30,12 @@ function japaneseNumeral(value: number): string {
   return numeral || DIGITS[1];
 }
 
-export function defaultChapterTitle(chapterNumber: number): string {
+export function defaultChapterTitle(chapterNumber: number, locale: AppLocale = "ja"): string {
+  if (locale === "en") return `Chapter ${Math.max(1, Math.trunc(chapterNumber))}`;
   return `第${japaneseNumeral(chapterNumber)}章`;
 }
 
-export function defaultSceneTitle(sceneNumber: number): string {
+export function defaultSceneTitle(sceneNumber: number, locale: AppLocale = "ja"): string {
+  if (locale === "en") return `Scene ${Math.max(1, Math.trunc(sceneNumber))}`;
   return `場面${japaneseNumeral(sceneNumber)}`;
 }

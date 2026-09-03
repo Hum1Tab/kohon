@@ -8,6 +8,7 @@ import {
   type LayoutPreferences
 } from "./layout.js";
 import { isHexColor, MANUSCRIPT_PALETTES, type ManuscriptTheme } from "./editor-theme.js";
+import type { AppLanguage } from "./locale.js";
 
 export { applyLayoutPreset, defaultLayout, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, LAYOUT_LIMITS, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, placeViewOnSide, projectLayoutV1, sanitizeLayout, sideOf, slotOf, TOOL_VIEWS, VIEW_IDS } from "./layout.js";
 export type { BottomPanelAlignment, DockSlotState, LayoutPatch, LayoutPreferences, PhysicalSide, SlotId, ViewId } from "./layout.js";
@@ -126,8 +127,8 @@ export interface AppearancePreferences {
 }
 
 export interface UserSettings {
-  schemaVersion: 3;
-  general: { autoSaveDelayMs: number };
+  schemaVersion: 4;
+  general: { autoSaveDelayMs: number; language: AppLanguage };
   appearance: AppearancePreferences;
   layout: LayoutPreferences;
   editor: EditorPreferences;
@@ -155,8 +156,8 @@ export function defaultKeybindings(): KeybindingMap {
 
 export function defaultUserSettings(): UserSettings {
   return {
-    schemaVersion: 3,
-    general: { autoSaveDelayMs: 800 },
+    schemaVersion: 4,
+    general: { autoSaveDelayMs: 800, language: "system" },
     appearance: { colorTheme: "light", accent: "forest", density: "comfortable" },
     layout: defaultLayout(),
     editor: { writingMode: "horizontal", theme: "paper", canvasBackground: MANUSCRIPT_PALETTES.paper.background, canvasText: null, font: DEFAULT_FONT, fontSize: 18, lineHeight: 2, width: 760 },
@@ -248,8 +249,11 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
   catch { return defaults; }
   const isV2Layout = (typeof source["schemaVersion"] === "number" && source["schemaVersion"] >= 2) || Object.prototype.hasOwnProperty.call(layout, "slots");
   return {
-    schemaVersion: 3,
-    general: { autoSaveDelayMs: finiteNumber(general["autoSaveDelayMs"], defaults.general.autoSaveDelayMs, 250, 5000) },
+    schemaVersion: 4,
+    general: {
+      autoSaveDelayMs: finiteNumber(general["autoSaveDelayMs"], defaults.general.autoSaveDelayMs, 250, 5000),
+      language: general["language"] === "ja" || general["language"] === "en" || general["language"] === "system" ? general["language"] : defaults.general.language
+    },
     appearance: {
       colorTheme: appearance["colorTheme"] === "default" || appearance["colorTheme"] === "light" || appearance["colorTheme"] === "dark" || appearance["colorTheme"] === "system" ? appearance["colorTheme"] : defaults.appearance.colorTheme,
       accent: appearance["accent"] === "forest" || appearance["accent"] === "gold" || appearance["accent"] === "ink"
@@ -280,7 +284,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
 
 export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatch): UserSettings {
   const candidate = sanitizeUserSettings({
-    schemaVersion: 3,
+    schemaVersion: 4,
     general: { ...current.general, ...patch.general },
     appearance: { ...current.appearance, ...patch.appearance },
     layout: mergeLayout(current.layout, patch.layout),
@@ -296,7 +300,7 @@ export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatc
 /** Serialize settings and include a legacy layout mirror until the KOHON migration is complete. */
 export function serializeUserSettings(settings: UserSettings): string {
   const layout = { ...settings.layout, ...projectLayoutV1(settings.layout) };
-  return `${JSON.stringify({ ...settings, schemaVersion: 3, layout }, null, 2)}\n`;
+  return `${JSON.stringify({ ...settings, schemaVersion: 4, layout }, null, 2)}\n`;
 }
 
 export function toElectronAccelerator(binding: string): string | undefined {

@@ -51,7 +51,7 @@ API keyは接続確認後にOSの保護機能で暗号化して保存し、安�
 
 ## インストール
 
-[GitHub Releases](https://github.com/Hum1Tab/kohon/releases/latest)からOSとCPUに合うKOHON 0.1.0を取得します。
+[GitHub Releases](https://github.com/Hum1Tab/kohon/releases/latest)からOSとCPUに合う最新版のKOHONを取得します。
 
 - Windows x64: setup `.exe` またはportable `.exe`
 - macOS: Intel / Apple Silicon用 `.dmg` または `.zip`
@@ -80,7 +80,7 @@ my-novel/
 └─ .novel-editor/          # schema 1互換のsession・復旧稿・保存点・Review Ledger
 ```
 
-`.novel-editor`は旧作品との履歴互換性を守るため、KOHON 0.1.0でも同じ場所を使います。アプリ更新やuninstallで作品folderは削除されません。
+`.novel-editor`は旧作品との履歴互換性を守るため、KOHONでも同じ場所を使います。アプリ更新やuninstallで作品folderは削除されません。
 
 ## 開発
 

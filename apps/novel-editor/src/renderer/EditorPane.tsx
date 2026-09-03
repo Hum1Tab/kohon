@@ -6,6 +6,7 @@ import type { ManuscriptTheme } from "../shared/editor-theme.js";
 import type { Chapter } from "../shared/types.js";
 import { AppIcon } from "./AppIcon.js";
 import { EditorFindBar } from "./EditorFindBar.js";
+import { useLocale } from "./LocaleContext.js";
 
 type EditorTabDrag = { groupId: EditorGroupId; chapterId: string } | null;
 type EditorTabDrop = { groupId: EditorGroupId; index: number } | null;
@@ -77,13 +78,14 @@ function closeChapterMenu(event: MouseEvent<HTMLButtonElement>): void {
 }
 
 export function EditorPane(props: EditorPaneProps): ReactNode {
+  const { locale, t } = useLocale();
   const { group, groupActive, groupChapterId, groupIndex, buffer, groupStats, manifestChapters } = props;
   const currentItem = groupIndex < 0 ? undefined : manifestChapters[groupIndex];
   const contextLabel = currentItem === undefined
-    ? "本文"
-    : `${currentItem.kind === "scene" ? "場面" : "章"} ${String(groupIndex + 1).padStart(2, "0")} / ${String(manifestChapters.length).padStart(2, "0")} · ${props.writingMode === "vertical-rl" ? "縦書き" : "横書き"}`;
+    ? t("本文")
+    : `${t(currentItem.kind === "scene" ? "場面" : "章")} ${String(groupIndex + 1).padStart(2, "0")} / ${String(manifestChapters.length).padStart(2, "0")} · ${t(props.writingMode === "vertical-rl" ? "縦書き" : "横書き")}`;
   const documentSaveState = buffer?.saveState ?? "saved";
-  const documentSaveLabel = documentSaveState === "saved" ? "保存済み" : documentSaveState === "saving" ? "保存中…" : documentSaveState === "dirty" ? "未保存" : "保存エラー";
+  const documentSaveLabel = t(documentSaveState === "saved" ? "保存済み" : documentSaveState === "saving" ? "保存中…" : documentSaveState === "dirty" ? "未保存" : "保存エラー");
 
   return <main
     className={`editor-pane manuscript-${props.theme} ${props.writingMode === "vertical-rl" ? "vertical" : "horizontal"} ${groupActive && props.findOpen ? "find-open" : ""} ${groupActive ? "active-group" : ""}`}
@@ -93,7 +95,7 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
     <div
       className={`editor-tabs ${props.editorTabDrag !== null ? "dragging" : ""}`}
       role="tablist"
-      aria-label={`開いている章 ${group.id}`}
+      aria-label={`${t("開いている章")} ${group.id}`}
       onDragOver={(event) => {
         if (event.target !== event.currentTarget) return;
         props.onTabDropOver(group.id, group.tabs.length, event);
@@ -166,12 +168,12 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
               buttons?.[target]?.focus();
               props.onLoadChapter(targetTab.chapterId, group.id);
             }}
-            title={`${item.title}（ドラッグ、または Alt+Shift+←/→ で移動）`}
+            title={locale === "en" ? `${item.title} (drag or press Alt+Shift+←/→ to move)` : `${item.title}（ドラッグ、または Alt+Shift+←/→ で移動）`}
           >
             <span>{item.title}</span>
-            {tabBuffer !== undefined && tabBuffer.saveState !== "saved" ? <i aria-label="未保存">●</i> : null}
+            {tabBuffer !== undefined && tabBuffer.saveState !== "saved" ? <i aria-label={t("未保存")}>●</i> : null}
           </button>
-          <button className="editor-tab-close" aria-label={`${item.title}を閉じる`} title="閉じる" onClick={(event) => { event.stopPropagation(); props.onCloseTab(item.id, group.id); }}><AppIcon name="close" /></button>
+          <button className="editor-tab-close" aria-label={locale === "en" ? `Close ${item.title}` : `${item.title}を閉じる`} title={t("閉じる")} onClick={(event) => { event.stopPropagation(); props.onCloseTab(item.id, group.id); }}><AppIcon name="close" /></button>
         </div>;
       })}
     </div>
@@ -195,20 +197,20 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
     />}
 
     <div className="editor-toolbar">
-      <div><span className="editor-context">{contextLabel}</span><h1>{buffer?.chapter.title ?? "章を選択"}</h1></div>
+      <div><span className="editor-context">{contextLabel}</span><h1>{buffer?.chapter.title ?? t("章を選択")}</h1></div>
       {groupActive && <div className="editor-actions">
-        <button className="icon-button" onClick={() => props.onSplit("right")} title="右に分割" aria-label="エディターを右に分割"><AppIcon name="splitRight" /></button>
-        <button className="icon-button" onClick={() => props.onSplit("down")} title="下に分割" aria-label="エディターを下に分割"><AppIcon name="splitDown" /></button>
-        {props.groupCount > 1 && <button className="icon-button" onClick={props.onCloseGroup} title="このグループを閉じる" aria-label="現在のエディターグループを閉じる"><AppIcon name="close" /></button>}
+        <button className="icon-button" onClick={() => props.onSplit("right")} title={t("右に分割")} aria-label={t("エディターを右に分割")}><AppIcon name="splitRight" /></button>
+        <button className="icon-button" onClick={() => props.onSplit("down")} title={t("下に分割")} aria-label={t("エディターを下に分割")}><AppIcon name="splitDown" /></button>
+        {props.groupCount > 1 && <button className="icon-button" onClick={props.onCloseGroup} title={t("このグループを閉じる")} aria-label={t("現在のエディターグループを閉じる")}><AppIcon name="close" /></button>}
         <details className="editor-more">
-          <summary aria-label="章の操作" title="章の操作"><AppIcon name="more" /></summary>
+          <summary aria-label={t("章の操作")} title={t("章の操作")}><AppIcon name="more" /></summary>
           <div className="editor-more-menu">
-            <button disabled={groupIndex <= 0} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(-1); }}>前へ移動</button>
-            <button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(1); }}>後ろへ移動</button>
-            <button onClick={(event) => { closeChapterMenu(event); props.onSplitChapter(); }}>カーソル位置で場面分割</button>
-            <button disabled={groupIndex <= 0} onClick={(event) => { closeChapterMenu(event); props.onMergeChapter(); }}>前の章・場面へ結合</button>
-            <button onClick={(event) => { closeChapterMenu(event); props.onRenameChapter(); }}>名前を変更</button>
-            <button className="danger-text" onClick={(event) => { closeChapterMenu(event); props.onDeleteChapter(); }}>章・場面を削除</button>
+            <button disabled={groupIndex <= 0} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(-1); }}>{t("前へ移動")}</button>
+            <button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(1); }}>{t("後ろへ移動")}</button>
+            <button onClick={(event) => { closeChapterMenu(event); props.onSplitChapter(); }}>{t("カーソル位置で場面分割")}</button>
+            <button disabled={groupIndex <= 0} onClick={(event) => { closeChapterMenu(event); props.onMergeChapter(); }}>{t("前の章・場面へ結合")}</button>
+            <button onClick={(event) => { closeChapterMenu(event); props.onRenameChapter(); }}>{t("名前を変更")}</button>
+            <button className="danger-text" onClick={(event) => { closeChapterMenu(event); props.onDeleteChapter(); }}>{t("章・場面を削除")}</button>
           </div>
         </details>
       </div>}
@@ -225,7 +227,7 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
         else props.editorRefs.current[group.id] = node;
         if (groupActive) props.editorRef.current = node;
       }}
-      aria-label={`${buffer?.chapter.title ?? "小説"}の本文`}
+      aria-label={locale === "en" ? `${buffer?.chapter.title ?? "Novel"} manuscript` : `${buffer?.chapter.title ?? "小説"}の本文`}
       className="manuscript-editor"
       value={buffer?.text ?? ""}
       spellCheck={false}
@@ -252,21 +254,21 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
       onScroll={(event) => { if (groupChapterId !== null) props.onSelection(group.id, groupChapterId, event.currentTarget); }}
       onBlur={(event) => { if (groupChapterId !== null) props.onBlur(group.id, groupChapterId, event.currentTarget); }}
       disabled={buffer === undefined}
-      placeholder="ここから物語を書き始めます。"
+      placeholder={t("ここから物語を書き始めます。")}
     /></div>
 
     <footer className="statusbar">
       <div className="status-primary">
-        <button type="button" className={`document-save-state ${documentSaveState}`} onClick={props.onSave} title="今すぐ保存"><i aria-hidden="true" />{documentSaveLabel}</button>
-        <span>{groupStats?.charactersNoWhitespace.toLocaleString() ?? "—"}字</span>
-        <span>{groupStats?.lines.toLocaleString() ?? "—"}行</span>
-        <span>{groupStats?.words.toLocaleString() ?? "—"}語</span>
+        <button type="button" className={`document-save-state ${documentSaveState}`} onClick={props.onSave} title={t("今すぐ保存")}><i aria-hidden="true" />{documentSaveLabel}</button>
+        <span>{groupStats?.charactersNoWhitespace.toLocaleString(locale) ?? "—"}{t("字")}</span>
+        <span>{groupStats?.lines.toLocaleString(locale) ?? "—"}{t("行")}</span>
+        <span>{groupStats?.words.toLocaleString(locale) ?? "—"}{t("語")}</span>
       </div>
       <div className="status-actions">
-        <select aria-label="原稿の配色" value={props.theme} onChange={(event) => props.onTheme(event.target.value as ManuscriptTheme)}>
-          <option value="paper">白い紙</option><option value="sepia">生成り</option><option value="gray">グレー</option><option value="dark">黒</option><option value="custom">カスタム</option>
+        <select aria-label={t("原稿の配色")} value={props.theme} onChange={(event) => props.onTheme(event.target.value as ManuscriptTheme)}>
+          <option value="paper">{t("白い紙")}</option><option value="sepia">{t("生成り")}</option><option value="gray">{t("グレー")}</option><option value="dark">{t("黒")}</option><option value="custom">{t("カスタム")}</option>
         </select>
-        <button onClick={props.onWritingMode} title="横書きと縦書きを切り替える">{props.writingMode === "vertical-rl" ? "縦書き" : "横書き"}</button>
+        <button onClick={props.onWritingMode} title={t("横書きと縦書きを切り替える")}>{t(props.writingMode === "vertical-rl" ? "縦書き" : "横書き")}</button>
       </div>
     </footer>
   </main>;
