@@ -74,8 +74,6 @@ type DropTarget =
 
 interface DockDragState {
   view: ViewId;
-  x: number;
-  y: number;
   target: DropTarget;
 }
 
@@ -1291,7 +1289,7 @@ export function App(): ReactNode {
         document.body.classList.remove("is-resizing");
         document.body.classList.add("is-docking");
       }
-      const next: DockDragState = { view, x: moveEvent.clientX, y: moveEvent.clientY, target: detectDropTarget(moveEvent.clientX, moveEvent.clientY) };
+      const next: DockDragState = { view, target: detectDropTarget(moveEvent.clientX, moveEvent.clientY) };
       dockSessionRef.current = next;
       setDockDrag(next);
     };
@@ -1762,21 +1760,24 @@ export function App(): ReactNode {
     return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onRestoreChapter={restoreCheckpointChapter} onVariation={createVariation} />;
   };
 
-  const dockZones = (nodeId: string, includeCenter: boolean): ReactNode => <div className={`dock-zones ${includeCenter ? "" : "without-center"}`} aria-hidden="true">
-    {(["left", "top", ...(includeCenter ? ["center" as const] : []), "bottom", "right"] as DockZone[]).map((zone) => <span key={zone} className={`dock-zone dock-zone-${zone} ${dockDrag?.target.kind === "dock-zone" && dockDrag.target.nodeId === nodeId && dockDrag.target.zone === zone ? "active" : ""}`}>{zone === "center" ? t("タブに追加") : t(zone === "left" ? "左" : zone === "right" ? "右" : zone === "top" ? "上" : "下")}</span>)}
-  </div>;
+  const dockPreview = (nodeId: string, includeCenter: boolean): ReactNode => {
+    if (dockDrag?.target.kind !== "dock-zone" || dockDrag.target.nodeId !== nodeId || (!includeCenter && dockDrag.target.zone === "center")) return null;
+    const zone = dockDrag.target.zone;
+    const label = zone === "center" ? t("タブに追加") : t(zone === "left" ? "左に配置" : zone === "right" ? "右に配置" : zone === "top" ? "上に配置" : "下に配置");
+    return <div className="dock-preview-layer" aria-hidden="true"><span className={`dock-preview dock-preview-${zone}`}>{label}</span></div>;
+  };
 
   const renderDockTabs = (node: DockTabsNode): ReactNode => {
     const activeView = node.activeView !== null && node.views.includes(node.activeView) ? node.activeView : node.views[0] ?? null;
     const hidden = node.visible === false;
-    return <aside key={node.id} className={`view-slot dock-tabs-node ${hidden ? "dock-node-hidden" : ""} ${dockDrag?.target.kind === "dock-zone" && dockDrag.target.nodeId === node.id ? "dock-target-active" : ""}`} data-dock-node-id={node.id} data-dock-node-type="tabs">
+    return <aside key={node.id} className={`view-slot dock-tabs-node ${hidden ? "dock-node-hidden" : ""}`} data-dock-node-id={node.id} data-dock-node-type="tabs">
       <div className="view-tabbar" role="tablist" aria-label={t("パネル")}><div className="view-tabs-scroll">{node.views.map((view) => <button key={view} type="button" role="tab" aria-selected={activeView === view} aria-controls={`view-panel-${node.id}`} tabIndex={activeView === view ? 0 : -1} className={`view-tab ${activeView === view ? "active" : ""}`} data-view-tab={view} title={`${viewLabel(view)} — ${t("ドラッグまたは右クリックで移動")}`} onClick={() => { if (!suppressDockClickRef.current) selectViewInTabs(node.id, view); }} onPointerDown={(event) => beginDockDrag(view, event)} onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => { event.preventDefault(); openViewMenu(view, event.clientX, event.clientY); }} onKeyDown={(event) => handleViewMenuKey(view, event)}><span className="view-tab-grip" aria-hidden="true">⠿</span><AppIcon name={view === "outline" ? "files" : view} size={14} />{viewLabel(view)}</button>)}</div><div className="view-tab-actions">{activeView !== null && <button type="button" className="view-tab-action" aria-label={t("パネル操作")} title={t("配置とパネル操作")} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openViewMenu(activeView, rect.right - 216, rect.bottom + 4); }}><AppIcon name="more" size={15} /></button>}<button type="button" className="view-tab-action" aria-label={t("パネルを閉じる")} title={t("パネルを閉じる")} onClick={() => activeView !== null && commitLayout(toggleViewVisibility(layout, activeView), t("パネルを閉じました"))}><AppIcon name="close" size={15} /></button></div></div>
-      <div className="view-slot-body" id={`view-panel-${node.id}`} role="tabpanel" aria-label={activeView === null ? t("空のパネル") : viewLabel(activeView)}>{activeView === null ? null : renderView(activeView)}</div>{dockZones(node.id, true)}
+      <div className="view-slot-body" id={`view-panel-${node.id}`} role="tabpanel" aria-label={activeView === null ? t("空のパネル") : viewLabel(activeView)}>{activeView === null ? null : renderView(activeView)}</div>{dockPreview(node.id, true)}
     </aside>;
   };
 
   const renderDockNode = (node: DockNode): ReactNode => {
-    if (node.type === "editor") return <section key={node.id} data-editor-pane data-dock-node-id={node.id} data-dock-node-type="editor" className={`dock-editor-node editor-groups split-${editorSession.split}`} aria-label={t("本文エディター")}>{editorSession.groups.map(renderEditorGroup)}{dockZones(node.id, false)}</section>;
+    if (node.type === "editor") return <section key={node.id} data-editor-pane data-dock-node-id={node.id} data-dock-node-type="editor" className={`dock-editor-node editor-groups split-${editorSession.split}`} aria-label={t("本文エディター")}>{editorSession.groups.map(renderEditorGroup)}{dockPreview(node.id, false)}</section>;
     if (node.type === "tabs") return renderDockTabs(node);
     const visibleChildren = node.children.map((child, index) => ({ child, index })).filter(({ child }) => dockNodeVisible(child));
     return <section key={node.id} data-dock-node-id={node.id} data-dock-node-type="split" className={`dock-split dock-split-${node.direction}`}>
@@ -1889,9 +1890,6 @@ export function App(): ReactNode {
       </aside>}
 
       <div className="dock-root" style={{ gridColumn: activityVisible ? layout.activityBar === "left" ? 2 : 1 : 1, gridRow: 1 }}>{renderDockNode(layout.zenMode && editorDockNode !== null ? editorDockNode : layout.root)}</div>
-      {dockDrag !== null && <div className="dock-layer" aria-hidden="true">
-        <span className="dock-ghost" style={{ transform: `translate(${dockDrag.x + 14}px, ${dockDrag.y + 14}px)` }}>{viewLabel(dockDrag.view)}</span>
-      </div>}
     </div>
     <span className="layout-announcement" aria-live="polite">{layoutAnnouncement}</span>
   </div>{promptDialog}{settingsOverlay}{quickAccessOverlay}{viewMenu !== null && <div

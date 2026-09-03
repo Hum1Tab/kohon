@@ -179,16 +179,15 @@ body.input-pointer button:focus, body.input-pointer input:focus, body.input-poin
 .dock-split-vertical > .dock-split-separator { height: 6px; cursor: row-resize; }
 .dock-tabs-node, .dock-editor-node { position: relative; }
 .dock-node-hidden { display: none; }
-.dock-zones { position: absolute; z-index: 12; inset: 0; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); gap: 5px; padding: 8px; pointer-events: none; opacity: 0; transition: opacity 100ms ease; }
-body.is-docking .dock-zones { opacity: 1; }
-.dock-zone { display: grid; place-items: center; min-width: 0; min-height: 0; color: var(--nl-accent); background: color-mix(in srgb, var(--nl-accent) 13%, var(--nl-surface-raised)); border: 1px dashed color-mix(in srgb, var(--nl-accent) 65%, var(--nl-line)); border-radius: 6px; font-size: 10px; font-weight: 800; opacity: .82; }
-.dock-zone-left { grid-area: 2 / 1 / 3 / 2; }
-.dock-zone-top { grid-area: 1 / 2 / 2 / 3; }
-.dock-zone-center { grid-area: 2 / 2 / 3 / 3; }
-.dock-zone-bottom { grid-area: 3 / 2 / 4 / 3; }
-.dock-zone-right { grid-area: 2 / 3 / 3 / 4; }
-.dock-zones.without-center { background: color-mix(in srgb, var(--nl-bg) 68%, transparent); }
-.dock-zone.active { color: var(--nl-on-accent); background: var(--nl-accent); border-style: solid; opacity: 1; }
+.dock-preview-layer { position: absolute; z-index: 12; inset: 0; overflow: hidden; pointer-events: none; }
+.dock-preview { position: absolute; display: grid; place-items: center; color: var(--nl-accent); background: color-mix(in srgb, var(--nl-accent) 13%, transparent); border: 1px solid color-mix(in srgb, var(--nl-accent) 72%, var(--nl-line)); border-radius: 5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nl-accent) 18%, transparent); font-size: 11px; font-weight: 800; animation: dock-preview-in 90ms ease-out; }
+.dock-preview-left { inset: 6px 50% 6px 6px; }
+.dock-preview-right { inset: 6px 6px 6px 50%; }
+.dock-preview-top { inset: 6px 6px 50% 6px; }
+.dock-preview-bottom { inset: 50% 6px 6px 6px; }
+.dock-preview-center { inset: 10px; }
+body.is-docking, body.is-docking * { cursor: grabbing !important; }
+@keyframes dock-preview-in { from { opacity: 0; } to { opacity: 1; } }
 .activity-bar { z-index: 3; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 9px 6px; background: var(--nl-surface); border-inline: 1px solid var(--nl-line); }
 .activity-main, .activity-foot { display: grid; gap: 7px; }
 .activity-button { position: relative; width: 38px; height: 38px; display: grid; place-items: center; color: var(--nl-muted); background: transparent; border: 0; border-radius: 9px; }
@@ -219,15 +218,6 @@ body.is-docking .dock-zones { opacity: 1; }
 .view-tab-action { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; color: var(--nl-muted); background: transparent; border: 0; border-radius: 6px; font-size: 17px; line-height: 1; }
 .view-tab-action:hover { color: var(--nl-text); background: var(--nl-surface-subtle); }
 .pane-heading.is-dragging, .view-tab.is-dragging { cursor: grabbing; }
-.dock-layer { position: fixed; z-index: 15; inset: var(--nl-topbar-height) 0 0; pointer-events: none; }
-.dock-target { position: absolute; display: grid; place-items: center; min-width: 72px; min-height: 44px; color: var(--nl-accent); background: color-mix(in srgb, var(--nl-accent) 10%, var(--nl-surface)); border: 1px dashed color-mix(in srgb, var(--nl-accent) 58%, var(--nl-line)); border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 120ms ease, background 120ms ease; }
-.dock-layer:has(.dock-target) .dock-target { opacity: .7; }
-.dock-target.active { opacity: 1; background: var(--nl-accent-soft); border-style: solid; }
-.dock-target.side-left { inset: 20% auto 20% 8px; width: 72px; }
-.dock-target.side-right { inset: 20% 8px 20% auto; width: 72px; }
-.dock-target.bottom { right: 20%; bottom: 8px; left: 20%; height: 48px; }
-.dock-ghost { position: fixed; top: 0; left: 0; padding: 7px 11px; color: var(--nl-on-accent); background: var(--nl-accent); border-radius: 6px; box-shadow: 0 8px 24px var(--nl-shadow); font-size: 11px; font-weight: 800; white-space: nowrap; }
-.dock-target-active { box-shadow: inset 0 0 0 2px var(--nl-accent); }
 .view-slot-body { min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
 .view-slot-body > .inspector-content { height: 100%; min-height: 0; overflow: auto; }
 .outline-content { height: 100%; min-height: 0; display: flex; flex-direction: column; }

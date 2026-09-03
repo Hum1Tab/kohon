@@ -2,6 +2,13 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.2.1 - 2026-09-04
+
+### Changed
+
+- Simplified panel dragging to show only one subtle preview for the current drop destination instead of displaying five boxes on every panel.
+- Removed the floating drag label and redundant panel outlines for a quieter, VS Code-like docking interaction.
+
 ## 0.2.0 - 2026-09-04
 
 ### Added
