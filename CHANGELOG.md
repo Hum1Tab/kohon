@@ -2,6 +2,13 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.1.2 - 2026-09-04
+
+### Fixed
+
+- Fixed a React hook-order crash that left the workbench completely blank after opening or creating a project.
+- Restored opening existing `kohon.json` and legacy `novel-lens.json` projects without changing manuscript data.
+
 ## 0.1.1 - 2026-09-03
 
 ### Added

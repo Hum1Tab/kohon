@@ -1702,6 +1702,88 @@ export function App(): ReactNode {
     onClose={() => setQuickAccessMode(null)}
   />;
 
+  const beginEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
+    activateEditorGroup(groupId);
+    pendingInputRef.current = null;
+    skipCompositionInputRef.current = null;
+    compositionRef.current = {
+      groupId,
+      chapterId,
+      text: editor.value,
+      selection: { start: editor.selectionStart, end: editor.selectionEnd }
+    };
+    setIsComposing(true);
+  }, [activateEditorGroup]);
+
+  const finishEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
+    const started = compositionRef.current;
+    compositionRef.current = null;
+    pendingInputRef.current = null;
+    setIsComposing(false);
+    if (started === null || started.groupId !== groupId || started.chapterId !== chapterId) return;
+    const selectionAfter = { start: editor.selectionStart, end: editor.selectionEnd };
+    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
+      chapterId,
+      beforeText: started.text,
+      afterText: editor.value,
+      selectionBefore: started.selection,
+      selectionAfter,
+      origin: "ime-commit",
+      timestamp: Date.now()
+    });
+    skipCompositionInputRef.current = { chapterId, text: editor.value };
+    textRef.current = editor.value;
+    updateBufferText(chapterId, editor.value);
+    setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: selectionAfter.start, selectionEnd: selectionAfter.end }));
+  }, [updateBufferText]);
+
+  const captureEditorInput = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, nativeComposing: boolean, inputType: string): void => {
+    if (nativeComposing || compositionRef.current !== null) return;
+    skipCompositionInputRef.current = null;
+    pendingInputRef.current = {
+      groupId,
+      chapterId,
+      text: editor.value,
+      selection: { start: editor.selectionStart, end: editor.selectionEnd },
+      origin: inputType === "insertText" || inputType.startsWith("deleteContent") ? "typing" : "input"
+    };
+  }, []);
+
+  const changeEditorText = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, groupActive: boolean): void => {
+    const skipped = skipCompositionInputRef.current;
+    if (skipped?.chapterId === chapterId && skipped.text === editor.value) {
+      skipCompositionInputRef.current = null;
+      if (groupActive) textRef.current = editor.value;
+      updateBufferText(chapterId, editor.value);
+      return;
+    }
+    const composing = compositionRef.current;
+    if (composing?.groupId === groupId && composing.chapterId === chapterId) {
+      if (groupActive) textRef.current = editor.value;
+      updateBufferText(chapterId, editor.value);
+      return;
+    }
+    const pending = pendingInputRef.current;
+    pendingInputRef.current = null;
+    const beforeText = pending?.groupId === groupId && pending.chapterId === chapterId
+      ? pending.text
+      : editorBuffersRef.current.buffers[chapterId]?.text ?? "";
+    const selectionBefore = pending?.groupId === groupId && pending.chapterId === chapterId
+      ? pending.selection
+      : { start: Math.min(editor.selectionStart, beforeText.length), end: Math.min(editor.selectionEnd, beforeText.length) };
+    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
+      chapterId,
+      beforeText,
+      afterText: editor.value,
+      selectionBefore,
+      selectionAfter: { start: editor.selectionStart, end: editor.selectionEnd },
+      origin: pending?.origin ?? "input",
+      timestamp: Date.now()
+    });
+    if (groupActive) textRef.current = editor.value;
+    updateBufferText(chapterId, editor.value);
+  }, [updateBufferText]);
+
   if (project === null) return <LocaleProvider locale={locale}><div className={shellClass} style={shellStyle}>
     <Welcome appInfo={appInfo} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onSettings={() => openSettings("appearance")} />
     {promptDialog}
@@ -1858,88 +1940,6 @@ export function App(): ReactNode {
     setEditorTabDrag(null);
     setEditorTabDrop(null);
   };
-
-  const beginEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
-    activateEditorGroup(groupId);
-    pendingInputRef.current = null;
-    skipCompositionInputRef.current = null;
-    compositionRef.current = {
-      groupId,
-      chapterId,
-      text: editor.value,
-      selection: { start: editor.selectionStart, end: editor.selectionEnd }
-    };
-    setIsComposing(true);
-  }, [activateEditorGroup]);
-
-  const finishEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
-    const started = compositionRef.current;
-    compositionRef.current = null;
-    pendingInputRef.current = null;
-    setIsComposing(false);
-    if (started === null || started.groupId !== groupId || started.chapterId !== chapterId) return;
-    const selectionAfter = { start: editor.selectionStart, end: editor.selectionEnd };
-    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
-      chapterId,
-      beforeText: started.text,
-      afterText: editor.value,
-      selectionBefore: started.selection,
-      selectionAfter,
-      origin: "ime-commit",
-      timestamp: Date.now()
-    });
-    skipCompositionInputRef.current = { chapterId, text: editor.value };
-    textRef.current = editor.value;
-    updateBufferText(chapterId, editor.value);
-    setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: selectionAfter.start, selectionEnd: selectionAfter.end }));
-  }, [updateBufferText]);
-
-  const captureEditorInput = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, nativeComposing: boolean, inputType: string): void => {
-    if (nativeComposing || compositionRef.current !== null) return;
-    skipCompositionInputRef.current = null;
-    pendingInputRef.current = {
-      groupId,
-      chapterId,
-      text: editor.value,
-      selection: { start: editor.selectionStart, end: editor.selectionEnd },
-      origin: inputType === "insertText" || inputType.startsWith("deleteContent") ? "typing" : "input"
-    };
-  }, []);
-
-  const changeEditorText = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement, groupActive: boolean): void => {
-    const skipped = skipCompositionInputRef.current;
-    if (skipped?.chapterId === chapterId && skipped.text === editor.value) {
-      skipCompositionInputRef.current = null;
-      if (groupActive) textRef.current = editor.value;
-      updateBufferText(chapterId, editor.value);
-      return;
-    }
-    const composing = compositionRef.current;
-    if (composing?.groupId === groupId && composing.chapterId === chapterId) {
-      if (groupActive) textRef.current = editor.value;
-      updateBufferText(chapterId, editor.value);
-      return;
-    }
-    const pending = pendingInputRef.current;
-    pendingInputRef.current = null;
-    const beforeText = pending?.groupId === groupId && pending.chapterId === chapterId
-      ? pending.text
-      : editorBuffersRef.current.buffers[chapterId]?.text ?? "";
-    const selectionBefore = pending?.groupId === groupId && pending.chapterId === chapterId
-      ? pending.selection
-      : { start: Math.min(editor.selectionStart, beforeText.length), end: Math.min(editor.selectionEnd, beforeText.length) };
-    editorHistoryRef.current = recordTextEdit(editorHistoryRef.current, {
-      chapterId,
-      beforeText,
-      afterText: editor.value,
-      selectionBefore,
-      selectionAfter: { start: editor.selectionStart, end: editor.selectionEnd },
-      origin: pending?.origin ?? "input",
-      timestamp: Date.now()
-    });
-    if (groupActive) textRef.current = editor.value;
-    updateBufferText(chapterId, editor.value);
-  }, [updateBufferText]);
 
   const renderEditorGroup = (group: EditorSessionState["groups"][number]): ReactNode => {
     const groupChapterId = group.activeChapterId;
