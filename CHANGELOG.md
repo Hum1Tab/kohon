@@ -2,6 +2,20 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.2.0 - 2026-09-04
+
+### Added
+
+- Replaced the fixed three-slot workbench with a recursive dock tree that supports arbitrarily nested horizontal and vertical panel groups.
+- Added five-zone drag targets on tool panels: drop on an edge to split, or in the center to join the target tab group.
+- Added per-split pointer and keyboard resizing, persisted split ratios, tab order, active tabs, and visibility.
+- Added keyboard-operable layout settings for moving each view around the manuscript or joining any other tab group.
+
+### Changed
+
+- Focus mode now renders only the manuscript editor regardless of the saved dock tree.
+- Existing Novel Lens and KOHON fixed-slot settings migrate to the new layout without changing manuscript files.
+
 ## 0.1.2 - 2026-09-04
 
 ### Fixed

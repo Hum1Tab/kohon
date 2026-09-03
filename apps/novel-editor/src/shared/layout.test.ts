@@ -1,65 +1,113 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyLayoutPreset,
   defaultLayout,
-  mergeLayout,
+  dockView,
+  findDockNode,
+  findViewNode,
+  listTabsNodes,
   migrateLayoutV1,
-  placeViewOnSide,
+  projectLayoutV1,
   sanitizeLayout,
-  type LayoutPreferences
+  setSplitSizes,
+  setTabsActive,
+  toggleViewVisibility,
+  type DockNode
 } from "./layout.js";
 
-describe("layout schema v2", () => {
-  it("keeps a partial v2 patch on top of defaults", () => {
-    const layout = sanitizeLayout({ zenMode: true, activityBarVisible: false, bottomPanelAlignment: "justify", bottomPanelMaximized: true });
-    expect(layout.slots.primary.views).toEqual(["outline"]);
-    expect(layout.slots.secondary.views).toEqual(["lens", "search", "history"]);
-    expect(layout.zenMode).toBe(true);
-    expect(layout.activityBarVisible).toBe(false);
-    expect(layout.bottomPanelAlignment).toBe("justify");
-    expect(layout.bottomPanelMaximized).toBe(true);
+function flatten(node: DockNode): DockNode[] {
+  return node.type === "split" ? [node, ...node.children.flatMap(flatten)] : [node];
+}
+
+describe("recursive dock layout", () => {
+  it("keeps one editor and every tool view exactly once", () => {
+    const all = flatten(defaultLayout().root);
+    expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
+    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "outline", "search"]);
   });
 
-  it("preserves independent slots during a deep merge", () => {
-    const current = placeViewOnSide(defaultLayout(), "search", "bottom");
-    const merged = mergeLayout(current, { slots: { primary: { visible: false } } });
-    expect(merged.slots.primary.visible).toBe(false);
-    expect(merged.slots.bottom.views).toEqual(["search"]);
-    expect(merged.slots.secondary.views).toEqual(["lens", "history"]);
-    expect(mergeLayout(merged, { bottomPanelMaximized: true }).bottomPanelMaximized).toBe(true);
+  it("repairs malformed persisted trees and round-trips the result", () => {
+    const layout = sanitizeLayout({
+      root: {
+        type: "split", id: "root", direction: "horizontal", sizes: [0, -4, 2],
+        children: [
+          { type: "editor", id: "editor" },
+          { type: "editor", id: "editor" },
+          { type: "tabs", id: "tools", views: ["lens", "lens"] }
+        ]
+      }
+    });
+    const all = flatten(layout.root);
+    expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
+    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "outline", "search"]);
+    expect(sanitizeLayout(JSON.parse(JSON.stringify(layout)) as Record<string, unknown>)).toEqual(layout);
   });
 
-  it("migrates the v1 inspector without dropping visibility or dimensions", () => {
-    const layout = migrateLayoutV1({ primarySidebar: "left", inspector: "left", sidebarWidth: 300, inspectorWidth: 400, showPrimarySidebar: false, showInspector: false });
-    expect(layout.primarySide).toBe("left");
-    expect(layout.secondarySameSide).toBe(true);
-    expect(layout.slots.primary).toMatchObject({ views: ["outline"], visible: false, size: 300 });
-    expect(layout.slots.secondary).toMatchObject({ views: ["lens", "search", "history"], visible: false, size: 400 });
+  it("migrates fixed slots without dropping sides, sizes, tabs, or visibility", () => {
+    const layout = migrateLayoutV1({
+      primarySide: "right", secondarySameSide: false,
+      slots: {
+        primary: { views: ["outline"], activeView: "outline", visible: false, size: 310 },
+        secondary: { views: ["lens", "search"], activeView: "search", visible: true, size: 440 },
+        bottom: { views: ["history"], activeView: "history", visible: true, size: 280 }
+      }
+    });
+    expect(layout.primarySide).toBe("right");
+    expect(layout.secondarySameSide).toBe(false);
+    expect(findViewNode(layout, "outline")?.visible).toBe(false);
+    expect(findViewNode(layout, "search")?.activeView).toBe("search");
+    expect(findViewNode(layout, "history")?.id).toBe("bottom");
+    expect(layout.root.type).toBe("split");
   });
 
-  it("uses an existing side slot for settings placement", () => {
-    const layout = defaultLayout();
-    const placed = placeViewOnSide(layout, "search", "left");
-    expect(placed.slots.primary.views).toEqual(["outline", "search"]);
-    expect(placed.secondarySameSide).toBe(false);
+  it("projects a usable fixed-slot mirror from a freely docked tree", () => {
+    let layout = defaultLayout();
+    layout = dockView(layout, "outline", "editor", "right");
+    layout = dockView(layout, "history", "editor", "bottom");
+    const legacy = projectLayoutV1(layout);
+    expect(legacy.primarySidebar).toBe("right");
+    expect(legacy.slots.bottom.views).toContain("history");
+    expect([...legacy.slots.primary.views, ...legacy.slots.secondary.views, ...legacy.slots.bottom.views].sort()).toEqual(["history", "lens", "outline", "search"]);
   });
 
-  it("is idempotent for a complete layout", () => {
-    const layout: LayoutPreferences = defaultLayout();
-    expect(sanitizeLayout(layout as unknown as Record<string, unknown>)).toEqual(layout);
+  it("joins tab groups, reorders tabs, and makes edge drops into nested splits", () => {
+    let layout = defaultLayout();
+    layout = dockView(layout, "search", "primary", "center", 1);
+    expect(findViewNode(layout, "search")?.id).toBe("primary");
+    expect(findViewNode(layout, "search")?.views).toEqual(["outline", "search"]);
+    layout = dockView(layout, "outline", "primary", "center", 2);
+    expect(findViewNode(layout, "outline")?.views).toEqual(["search", "outline"]);
+    layout = dockView(layout, "history", "primary", "bottom");
+    expect(flatten(layout.root).some((node) => node.type === "split" && node.direction === "vertical")).toBe(true);
   });
 
-  it("applies task presets without discarding side choices or resized dimensions", () => {
-    const current = defaultLayout();
-    current.primarySide = "right";
-    current.slots.primary.size = 318;
-    const writing = applyLayoutPreset(current, "writing");
-    expect(writing.primarySide).toBe("right");
-    expect(writing.slots.primary).toMatchObject({ views: ["outline"], visible: true, size: 318 });
-    expect(writing.slots.secondary.visible).toBe(false);
-    const compare = applyLayoutPreset(current, "compare");
-    expect(compare.slots.bottom).toMatchObject({ views: ["history"], activeView: "history", visible: true });
-    expect(compare.slots.secondary).toMatchObject({ views: ["lens", "search"], activeView: "search", visible: true });
+  it("can split around the editor repeatedly and generates stable unique IDs", () => {
+    let layout = defaultLayout();
+    layout = dockView(layout, "lens", "editor", "left");
+    layout = dockView(layout, "search", "editor", "right");
+    layout = dockView(layout, "history", "editor", "top");
+    layout = dockView(layout, "outline", "editor", "bottom");
+    const all = flatten(layout.root);
+    expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
+    expect(new Set(all.map((node) => node.id)).size).toBe(all.length);
+    expect(listTabsNodes(layout)).toHaveLength(4);
+  });
+
+  it("updates active tabs, group visibility, and the intended split weights", () => {
+    let layout = defaultLayout();
+    layout = setTabsActive(layout, "secondary", "history");
+    expect(findViewNode(layout, "history")?.activeView).toBe("history");
+    layout = toggleViewVisibility(layout, "history");
+    expect(findViewNode(layout, "history")?.visible).toBe(false);
+    const root = layout.root;
+    expect(root.type).toBe("split");
+    if (root.type !== "split") return;
+    layout = setSplitSizes(layout, root.id, [3, 2, 1]);
+    const changed = findDockNode(layout.root, root.id);
+    expect(changed?.type).toBe("split");
+    if (changed?.type === "split") {
+      expect(changed.sizes.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
+      expect(changed.sizes[0]).toBeCloseTo(0.5);
+    }
   });
 });

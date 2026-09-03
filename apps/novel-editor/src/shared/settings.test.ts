@@ -29,13 +29,14 @@ describe("desktop user settings", () => {
 
   it("migrates v1 layout fields and writes a v1 compatibility mirror", () => {
     const settings = sanitizeUserSettings({ schemaVersion: 1, layout: { primarySidebar: "right", inspector: "bottom", showInspector: false } });
-    expect(settings.schemaVersion).toBe(4);
+    expect(settings.schemaVersion).toBe(5);
     expect(settings.layout.primarySide).toBe("right");
-    expect(settings.layout.slots.bottom.visible).toBe(false);
+    expect(settings.layout.root.type).toBe("split");
     const serialized = JSON.parse(serializeUserSettings(settings)) as { schemaVersion: number; layout: Record<string, unknown> };
-    expect(serialized.schemaVersion).toBe(4);
+    expect(serialized.schemaVersion).toBe(5);
     expect(serialized.layout["primarySidebar"]).toBe("right");
     expect(serialized.layout["inspector"]).toBe("bottom");
+    expect(serialized.layout["root"]).toBeDefined();
     expect(serialized.layout["slots"]).toBeDefined();
   });
 

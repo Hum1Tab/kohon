@@ -10,8 +10,8 @@ import {
 import { isHexColor, MANUSCRIPT_PALETTES, type ManuscriptTheme } from "./editor-theme.js";
 import type { AppLanguage } from "./locale.js";
 
-export { applyLayoutPreset, defaultLayout, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, LAYOUT_LIMITS, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, placeViewOnSide, projectLayoutV1, sanitizeLayout, sideOf, slotOf, TOOL_VIEWS, VIEW_IDS } from "./layout.js";
-export type { BottomPanelAlignment, DockSlotState, LayoutPatch, LayoutPreferences, PhysicalSide, SlotId, ViewId } from "./layout.js";
+export { applyLayoutPreset, defaultLayout, dockView, EDITOR_MIN_WIDTH, EDITOR_SCROLL_MIN_HEIGHT, findDockNode, findViewNode, LAYOUT_LIMITS, listTabsNodes, mergeLayout, migrateLayoutV1, moveSlotToSide, moveView, moveViewToZone, placeViewOnSide, projectLayoutV1, revealView, sanitizeLayout, setSplitSizes, setTabsActive, setTabsVisibility, sideOf, slotOf, TOOL_VIEWS, toggleViewVisibility, VIEW_IDS } from "./layout.js";
+export type { BottomPanelAlignment, DockEditorNode, DockNode, DockSlotState, DockSplitNode, DockTabsNode, DockZone, LayoutPatch, LayoutPreferences, PhysicalSide, SlotId, ViewId } from "./layout.js";
 
 export type AppCommandId =
   | "file.new"
@@ -127,7 +127,7 @@ export interface AppearancePreferences {
 }
 
 export interface UserSettings {
-  schemaVersion: 4;
+  schemaVersion: 5;
   general: { autoSaveDelayMs: number; language: AppLanguage };
   appearance: AppearancePreferences;
   layout: LayoutPreferences;
@@ -156,7 +156,7 @@ export function defaultKeybindings(): KeybindingMap {
 
 export function defaultUserSettings(): UserSettings {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     general: { autoSaveDelayMs: 800, language: "system" },
     appearance: { colorTheme: "light", accent: "forest", density: "comfortable" },
     layout: defaultLayout(),
@@ -247,9 +247,10 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
   }
   try { validateKeybindings(keybindings); }
   catch { return defaults; }
-  const isV2Layout = (typeof source["schemaVersion"] === "number" && source["schemaVersion"] >= 2) || Object.prototype.hasOwnProperty.call(layout, "slots");
+  const isV5Layout = Object.prototype.hasOwnProperty.call(layout, "root");
+  const isV2Layout = !isV5Layout && ((typeof source["schemaVersion"] === "number" && source["schemaVersion"] >= 2) || Object.prototype.hasOwnProperty.call(layout, "slots"));
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     general: {
       autoSaveDelayMs: finiteNumber(general["autoSaveDelayMs"], defaults.general.autoSaveDelayMs, 250, 5000),
       language: general["language"] === "ja" || general["language"] === "en" || general["language"] === "system" ? general["language"] : defaults.general.language
@@ -261,7 +262,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
         : appearance["accent"] === "amber" ? "gold" : appearance["accent"] === "blue" ? "ink" : appearance["accent"] === "violet" ? "forest" : defaults.appearance.accent,
       density: appearance["density"] === "compact" || appearance["density"] === "comfortable" ? appearance["density"] : defaults.appearance.density
     },
-    layout: isV2Layout ? sanitizeLayout(layout) : migrateLayoutV1(layout),
+    layout: isV5Layout ? sanitizeLayout(layout) : isV2Layout ? migrateLayoutV1(layout) : migrateLayoutV1(layout),
     editor: {
       writingMode: editor["writingMode"] === "vertical-rl" ? "vertical-rl" : editor["writingMode"] === "horizontal" ? "horizontal" : defaults.editor.writingMode,
       theme: editor["theme"] === "custom" || editor["theme"] === "gray" || editor["theme"] === "dark" || editor["theme"] === "sepia" || editor["theme"] === "paper" ? editor["theme"] : defaults.editor.theme,
@@ -284,7 +285,7 @@ export function sanitizeUserSettings(input: unknown): UserSettings {
 
 export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatch): UserSettings {
   const candidate = sanitizeUserSettings({
-    schemaVersion: 4,
+    schemaVersion: 5,
     general: { ...current.general, ...patch.general },
     appearance: { ...current.appearance, ...patch.appearance },
     layout: mergeLayout(current.layout, patch.layout),
@@ -300,7 +301,7 @@ export function mergeUserSettings(current: UserSettings, patch: UserSettingsPatc
 /** Serialize settings and include a legacy layout mirror until the KOHON migration is complete. */
 export function serializeUserSettings(settings: UserSettings): string {
   const layout = { ...settings.layout, ...projectLayoutV1(settings.layout) };
-  return `${JSON.stringify({ ...settings, schemaVersion: 4, layout }, null, 2)}\n`;
+  return `${JSON.stringify({ ...settings, schemaVersion: 5, layout }, null, 2)}\n`;
 }
 
 export function toElectronAccelerator(binding: string): string | undefined {

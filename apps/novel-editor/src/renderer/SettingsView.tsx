@@ -8,15 +8,16 @@ import { useModalFocus } from "./useModalFocus.js";
 import {
   COMMAND_DEFINITIONS,
   bindingFromKeyboardEvent,
+  dockView,
+  findViewNode,
   formatKeybinding,
-  placeViewOnSide,
   type AppCommandId,
   type EditorPreferences,
   type UserSettings,
   type UserSettingsPatch
 } from "../shared/settings.js";
 import { commandCategory, commandLabel } from "../shared/locale.js";
-import { defaultLayout, LAYOUT_LIMITS, type PhysicalSide, type SlotId, type ViewId } from "../shared/layout.js";
+import { defaultLayout, type DockEditorNode, type DockNode, type DockTabsNode, type DockZone, type LayoutPatch, type PhysicalSide, type ViewId } from "../shared/layout.js";
 import type { AppInfo, ConnectionStatus, ProjectSettings, ProjectSummary, UpdateStatus } from "../shared/types.js";
 
 export type SettingsCategory = "general" | "appearance" | "layout" | "editor" | "ai" | "accounts" | "keyboard" | "updates" | "about";
@@ -79,17 +80,16 @@ function settingMatches(query: string, locale: "ja" | "en", ...terms: string[]):
 
 const VIEW_LABELS: Record<ViewId, string> = { outline: "章アウトライン", lens: "編集レンズ", search: "作品内検索", history: "履歴" };
 
-function viewSlot(layout: UserSettings["layout"], view: ViewId): SlotId {
-  if (layout.slots.primary.views.includes(view)) return "primary";
-  if (layout.slots.secondary.views.includes(view)) return "secondary";
-  return "bottom";
+function tabGroups(node: DockNode): DockTabsNode[] {
+  if (node.type === "tabs") return [node];
+  if (node.type === "split") return node.children.flatMap(tabGroups);
+  return [];
 }
 
-function viewSide(layout: UserSettings["layout"], view: ViewId): PhysicalSide | "bottom" {
-  const slot = viewSlot(layout, view);
-  if (slot === "bottom") return "bottom";
-  if (slot === "primary") return layout.primarySide;
-  return layout.secondarySameSide ? layout.primarySide : layout.primarySide === "left" ? "right" : "left";
+function editorNode(node: DockNode): DockEditorNode | null {
+  if (node.type === "editor") return node;
+  if (node.type === "split") return node.children.map(editorNode).find((child): child is DockEditorNode => child !== null) ?? null;
+  return null;
 }
 
 function StatusBadge({ state, children }: { state: "ok" | "warn" | "muted"; children: ReactNode }): ReactNode {
@@ -238,19 +238,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
           <SettingRow title={t("アクセントカラー")} description={t("アイコン由来の森・金・インクから選びます。")}><select value={props.settings.appearance.accent} onChange={(event) => void props.onUpdateUser({ appearance: { accent: event.target.value as "forest" | "gold" | "ink" } })}><option value="forest">{t("森")}</option><option value="gold">{t("金")}</option><option value="ink">{t("インク")}</option></select></SettingRow>
           <SettingRow title={t("表示密度")} description={t("各パネルの余白とコントロールの密度を調整します。")}><select value={props.settings.appearance.density} onChange={(event) => void props.onUpdateUser({ appearance: { density: event.target.value as "comfortable" | "compact" } })}><option value="comfortable">{t("標準")}</option><option value="compact">{t("コンパクト")}</option></select></SettingRow>
         </SettingsSection>}
-        {props.category === "layout" && <SettingsSection eyebrow="LAYOUT" title={t("レイアウト")} lead={t("タブや左端のアイコンをドラッグして移動できます。ここでは同じ配置を選択操作で設定できます。")}>
-          <SettingRow title={t("メインサイドバー")} description={t("章アウトラインの基準辺です。")}><select value={props.settings.layout.primarySide} onChange={(event) => void props.onUpdateUser({ layout: { primarySide: event.target.value as PhysicalSide } })}><option value="left">{t("左")}</option><option value="right">{t("右")}</option></select></SettingRow>
-          <SettingRow title={t("アクティビティバー")} description={t("ビュー切り替えバーを表示し、左右を選べます。")}><div className="settings-checks"><label className="toggle"><input type="checkbox" checked={props.settings.layout.activityBarVisible} onChange={(event) => void props.onUpdateUser({ layout: { activityBarVisible: event.target.checked } })} />{t("表示")}</label><select value={props.settings.layout.activityBar} onChange={(event) => void props.onUpdateUser({ layout: { activityBar: event.target.value as PhysicalSide } })}><option value="left">{t("左")}</option><option value="right">{t("右")}</option></select></div></SettingRow>
-          {(["outline", "lens", "search", "history"] as const).map((view) => <SettingRow key={view} title={t(VIEW_LABELS[view])} description={t("ビュー単位で左・右・下へ配置します。")}><select aria-label={`${t(VIEW_LABELS[view])}${t("の位置")}`} value={viewSide(props.settings.layout, view)} onChange={(event) => void props.onUpdateUser({ layout: placeViewOnSide(props.settings.layout, view, event.target.value as PhysicalSide | "bottom") })}><option value="left">{t("左")}</option><option value="right">{t("右")}</option><option value="bottom">{t("下")}</option></select></SettingRow>)}
-          <SettingRow title={t("表示するパネル")} description={t("スロットごとの表示を切り替えます。ビューの所属は保持されます。")}><div className="settings-checks"><label className="toggle"><input type="checkbox" checked={props.settings.layout.slots.primary.visible} onChange={(event) => void props.onUpdateUser({ layout: { slots: { primary: { visible: event.target.checked } } } })} />{t("章アウトライン")}</label><label className="toggle"><input type="checkbox" checked={props.settings.layout.slots.secondary.visible} onChange={(event) => void props.onUpdateUser({ layout: { slots: { secondary: { visible: event.target.checked } } } })} />{t("左右パネル")}</label><label className="toggle"><input type="checkbox" checked={props.settings.layout.slots.bottom.visible} onChange={(event) => void props.onUpdateUser({ layout: { slots: { bottom: { visible: event.target.checked } } } })} />{t("下部パネル")}</label></div></SettingRow>
-          <SettingRow title={t("サイドバー幅")} description={`${props.settings.layout.slots.primary.size} px`}><input aria-label={t("サイドバー幅")} type="range" min={LAYOUT_LIMITS.primary.min} max={LAYOUT_LIMITS.primary.max} step="4" value={props.settings.layout.slots.primary.size} onChange={(event) => void props.onUpdateUser({ layout: { slots: { primary: { size: Number(event.target.value) } } } })} /></SettingRow>
-          <SettingRow title={t("インスペクター幅")} description={`${props.settings.layout.slots.secondary.size} px`}><input aria-label={t("インスペクター幅")} type="range" min={LAYOUT_LIMITS.secondary.min} max={LAYOUT_LIMITS.secondary.max} step="10" value={props.settings.layout.slots.secondary.size} onChange={(event) => void props.onUpdateUser({ layout: { slots: { secondary: { size: Number(event.target.value) } } } })} /></SettingRow>
-          <SettingRow title={t("下部パネルの高さ")} description={`${props.settings.layout.slots.bottom.size} px`}><input aria-label={t("下部パネルの高さ")} type="range" min={LAYOUT_LIMITS.bottom.min} max={LAYOUT_LIMITS.bottom.max} step="10" value={props.settings.layout.slots.bottom.size} onChange={(event) => void props.onUpdateUser({ layout: { slots: { bottom: { size: Number(event.target.value) } } } })} /></SettingRow>
-          <SettingRow title={t("下部パネルの幅")} description={t("本文列だけ、または左右パネルを含む全幅で表示します。")}><select value={props.settings.layout.bottomPanelAlignment} onChange={(event) => void props.onUpdateUser({ layout: { bottomPanelAlignment: event.target.value as "editor" | "justify" } })}><option value="editor">{t("本文幅")}</option><option value="justify">{t("全幅")}</option></select></SettingRow>
-          <SettingRow title={t("下部パネルの最大化")} description={t("下部ビューだけを作業領域いっぱいに表示します。")}><label className="toggle"><input type="checkbox" checked={props.settings.layout.bottomPanelMaximized} disabled={!props.settings.layout.slots.bottom.visible} onChange={(event) => void props.onUpdateUser({ layout: { bottomPanelMaximized: event.target.checked } })} />{props.settings.layout.bottomPanelMaximized ? t("最大") : t("通常")}</label></SettingRow>
-          <SettingRow title={t("集中モード（Zen）")} description={t("サイドバーとインスペクターを隠し、本文に集中します。")}><label className="toggle"><input type="checkbox" checked={props.settings.layout.zenMode} onChange={(event) => void props.onUpdateUser({ layout: { zenMode: event.target.checked } })} />{props.settings.layout.zenMode ? t("オン") : t("オフ")}</label></SettingRow>
-          <div className="settings-actions"><button className="secondary" onClick={() => void props.onUpdateUser({ layout: defaultLayout() })}>{t("既定レイアウトへ戻す")}</button></div>
-        </SettingsSection>}
+        {props.category === "layout" && <LayoutSettings layout={props.settings.layout} onUpdate={(layout) => props.onUpdateUser({ layout })} t={t} />}
         {props.category === "editor" && <SettingsSection eyebrow="EDITOR" title={t("エディター")} lead={t("VS Codeと同じように、ユーザー既定値と作品固有の上書きを分けます。")}>{editorPanel}</SettingsSection>}
         {props.category === "ai" && <SettingsSection eyebrow="AI CONNECTION" title={t("AIレンズ")} lead={t("ChatGPTのCodex利用枠、または任意のOpenAI APIキーで、選んだ原稿範囲だけを読みます。")}>
           <SettingRow title={t("既定の接続")} description={t("新しく開いたレンズで最初に選ばれる接続です。")}><select value={props.settings.ai.defaultProvider} onChange={(event) => void props.onUpdateUser({ ai: { defaultProvider: event.target.value as "mock" | "codex" | "openai" } })}><option value="codex">{t("ChatGPT（Codex枠）")}</option><option value="mock">{t("Offline Mock（通信なし）")}</option><option value="openai">{t("OpenAI API（従量課金）")}</option></select></SettingRow>
@@ -295,6 +283,66 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
       </main>
     </div>
   </div>;
+}
+
+function LayoutSettings({ layout, onUpdate, t }: { layout: UserSettings["layout"]; onUpdate: (layout: LayoutPatch) => Promise<void>; t: (text: string) => string }): ReactNode {
+  const [mergeTargets, setMergeTargets] = useState<Partial<Record<ViewId, string>>>({});
+  const groups = tabGroups(layout.root);
+  const editor = editorNode(layout.root);
+  const moveZones: readonly { zone: Exclude<DockZone, "center">; label: string }[] = [
+    { zone: "left", label: "左" },
+    { zone: "right", label: "右" },
+    { zone: "top", label: "上" },
+    { zone: "bottom", label: "下" }
+  ];
+  const moveRelativeToEditor = (view: ViewId, zone: Exclude<DockZone, "center">): void => {
+    if (editor === null) return;
+    void onUpdate(dockView(layout, view, editor.id, zone));
+  };
+  const mergeIntoGroup = (view: ViewId): void => {
+    const targetId = mergeTargets[view];
+    if (targetId === undefined || groups.every((group) => group.id !== targetId)) return;
+    void onUpdate(dockView(layout, view, targetId, "center"));
+  };
+  const groupName = (group: DockTabsNode): string => {
+    const index = groups.findIndex((item) => item.id === group.id);
+    return `${t("グループ")} ${index + 1} · ${group.views.map((view) => t(VIEW_LABELS[view])).join(" / ")}`;
+  };
+
+  return <SettingsSection eyebrow="LAYOUT" title={t("レイアウト")} lead={t("ビューを本文の周囲へ移動したり、任意のタブグループへまとめたりできます。")}>
+    <SettingRow title={t("アクティビティバー")} description={t("ビュー切り替えバーの表示と位置を設定します。")}>
+      <div className="settings-checks">
+        <label className="toggle"><input type="checkbox" checked={layout.activityBarVisible} onChange={(event) => void onUpdate({ activityBarVisible: event.target.checked })} />{t("表示")}</label>
+        <select aria-label={t("アクティビティバーの位置")} value={layout.activityBar} onChange={(event) => void onUpdate({ activityBar: event.target.value as PhysicalSide })}><option value="left">{t("左")}</option><option value="right">{t("右")}</option></select>
+      </div>
+    </SettingRow>
+    <div className="settings-layout-groups">
+      <h3>{t("ビューのタブグループ")}</h3>
+      <p className="settings-note">{t("現在の所属を確認し、本文に対する位置または別グループへの中央合流を選びます。")}</p>
+      {(["outline", "lens", "search", "history"] as const).map((view) => {
+        const current = findViewNode(layout, view);
+        const otherGroups = groups.filter((group) => group.id !== current?.id);
+        const selectedTarget = mergeTargets[view] ?? "";
+        return <div className="settings-layout-view" key={view}>
+          <div className="settings-layout-view-heading"><strong>{t(VIEW_LABELS[view])}</strong><span>{current === undefined || current === null ? t("所属不明") : `${t("現在")}：${groupName(current)}`}</span></div>
+          <div className="settings-actions" role="group" aria-label={`${t(VIEW_LABELS[view])}${t("を本文の周囲へ移動")}`}>
+            {moveZones.map(({ zone, label }) => <button type="button" className="secondary" key={zone} disabled={editor === null} onClick={() => moveRelativeToEditor(view, zone)}>{t(label)}</button>)}
+          </div>
+          <div className="settings-layout-merge">
+            <select aria-label={`${t(VIEW_LABELS[view])}${t("の合流先")}`} value={selectedTarget} onChange={(event) => setMergeTargets((targets) => ({ ...targets, [view]: event.target.value }))} disabled={otherGroups.length === 0}>
+              <option value="">{otherGroups.length === 0 ? t("他のタブグループなし") : t("合流先を選択")}</option>
+              {otherGroups.map((group) => <option value={group.id} key={group.id}>{groupName(group)}</option>)}
+            </select>
+            <button type="button" className="secondary" disabled={selectedTarget === "" || otherGroups.every((group) => group.id !== selectedTarget)} onClick={() => mergeIntoGroup(view)}>{t("中央で合流")}</button>
+          </div>
+        </div>;
+      })}
+    </div>
+    <SettingRow title={t("集中モード（Zen）")} description={t("すべてのドックを隠し、本文に集中します。チェックボックスはTabとSpaceで操作できます。")}>
+      <label className="toggle"><input type="checkbox" aria-label={t("集中モード（Zen）")} checked={layout.zenMode} onChange={(event) => void onUpdate({ zenMode: event.target.checked })} />{layout.zenMode ? t("オン") : t("オフ")}</label>
+    </SettingRow>
+    <div className="settings-actions"><button type="button" className="secondary" onClick={() => void onUpdate(defaultLayout())}>{t("既定レイアウトへ戻す")}</button></div>
+  </SettingsSection>;
 }
 
 function SettingsSection({ eyebrow, title, lead, children }: { eyebrow: string; title: string; lead: string; children: ReactNode }): ReactNode {
