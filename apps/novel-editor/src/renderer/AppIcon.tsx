@@ -3,7 +3,8 @@ import { useId, type ReactNode, type SVGProps } from "react";
 export type IconName =
   | "logo" | "files" | "lens" | "search" | "history" | "settings" | "layout"
   | "sun" | "moon" | "new" | "open" | "checkpoint" | "export" | "add"
-  | "import" | "focus" | "panel" | "edit" | "close" | "check";
+  | "import" | "focus" | "panel" | "edit" | "close" | "check"
+  | "splitRight" | "splitDown" | "more";
 
 export interface AppIconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
   name: IconName;
@@ -31,7 +32,10 @@ const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
   panel: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M8.5 4v16M12 8h5M12 12h5M12 16h3" /></>,
   edit: <><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5Z" /><path d="m13.5 7 3.5 3.5" /></>,
   close: <><circle cx="12" cy="12" r="8.5" /><path d="m9 9 6 6M15 9l-6 6" /></>,
-  check: <><circle cx="12" cy="12" r="8.5" /><path d="m8 12 2.7 2.7L16.5 9" /></>
+  check: <><circle cx="12" cy="12" r="8.5" /><path d="m8 12 2.7 2.7L16.5 9" /></>,
+  splitRight: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M12 4v16" /></>,
+  splitDown: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M3.5 12h17" /></>,
+  more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>
 };
 
 export function AppIcon({ name, size = 20, tile = false, title, className, ...props }: AppIconProps) {

@@ -69,8 +69,9 @@ function projectValue(project: ProjectSummary | null, key: EditorKey): unknown {
 }
 
 function settingMatches(query: string, ...terms: string[]): boolean {
-  const normalized = query.trim().toLocaleLowerCase();
-  return normalized.length === 0 || terms.join(" ").toLocaleLowerCase().includes(normalized);
+  const words = query.trim().toLocaleLowerCase("ja-JP").split(/\s+/u).filter(Boolean);
+  const haystack = terms.join(" ").toLocaleLowerCase("ja-JP");
+  return words.length === 0 || words.every((word) => haystack.includes(word));
 }
 
 const VIEW_LABELS: Record<ViewId, string> = { outline: "章アウトライン", lens: "編集レンズ", search: "作品内検索", history: "履歴" };
@@ -228,7 +229,7 @@ export function SettingsView(props: SettingsViewProps): ReactNode {
           <SettingRow title="設定の保存場所" description="ユーザー設定はOSのKOHON設定フォルダーに保存します。APIキーとGitHub tokenは含みません。"><StatusBadge state="ok">ローカルのみ</StatusBadge></SettingRow>
         </SettingsSection>}
         {props.category === "appearance" && <SettingsSection eyebrow="APPEARANCE" title="外観" lead="作業UIの色と表示密度を設定します。原稿キャンバスの紙色はエディター設定で独立して選べます。">
-          <SettingRow title="カラーテーマ" description="ブランド既定、純白、VS Code風の黒を明確に分けます。"><select value={props.settings.appearance.colorTheme} onChange={(event) => void props.onUpdateUser({ appearance: { colorTheme: event.target.value as "system" | "default" | "light" | "dark" } })}><option value="default">既定（森と紙）</option><option value="light">ホワイト</option><option value="dark">ダーク</option><option value="system">OSに合わせる</option></select></SettingRow>
+          <SettingRow title="カラーテーマ" description="作業UI全体を白、紙色、ダーク、またはOS設定に統一します。"><select value={props.settings.appearance.colorTheme} onChange={(event) => void props.onUpdateUser({ appearance: { colorTheme: event.target.value as "system" | "default" | "light" | "dark" } })}><option value="light">ホワイト（既定）</option><option value="default">紙色</option><option value="dark">ダーク</option><option value="system">OSに合わせる</option></select></SettingRow>
           <SettingRow title="アクセントカラー" description="アイコン由来の森・金・インクから選びます。"><select value={props.settings.appearance.accent} onChange={(event) => void props.onUpdateUser({ appearance: { accent: event.target.value as "forest" | "gold" | "ink" } })}><option value="forest">森</option><option value="gold">金</option><option value="ink">インク</option></select></SettingRow>
           <SettingRow title="表示密度" description="各パネルの余白とコントロールの密度を調整します。"><select value={props.settings.appearance.density} onChange={(event) => void props.onUpdateUser({ appearance: { density: event.target.value as "comfortable" | "compact" } })}><option value="comfortable">標準</option><option value="compact">コンパクト</option></select></SettingRow>
         </SettingsSection>}

@@ -8,6 +8,7 @@ export type ViewId = "outline" | "lens" | "search" | "history";
 export type SlotId = "primary" | "secondary" | "bottom";
 export type PhysicalSide = "left" | "right";
 export type BottomPanelAlignment = "editor" | "justify";
+export type LayoutPreset = "writing" | "review" | "compare";
 
 export const VIEW_IDS: readonly ViewId[] = ["outline", "lens", "search", "history"];
 export const TOOL_VIEWS: readonly ViewId[] = ["lens", "search", "history"];
@@ -79,6 +80,42 @@ export function defaultLayout(): LayoutPreferences {
       bottom: defaultSlot("bottom")
     }
   };
+}
+
+/**
+ * Useful task-oriented starting points that deliberately preserve the author's
+ * side choice and manually resized dimensions.
+ */
+export function applyLayoutPreset(layout: LayoutPreferences, preset: LayoutPreset): LayoutPreferences {
+  const slot = (id: SlotId, views: ViewId[], activeView: ViewId | null, visible: boolean): DockSlotState => ({
+    ...layout.slots[id], views, activeView, visible
+  });
+  const shared = {
+    ...layout,
+    activityBarVisible: true,
+    bottomPanelAlignment: "editor" as const,
+    bottomPanelMaximized: false,
+    zenMode: false
+  };
+  if (preset === "writing") {
+    return applyLayoutInvariants({ ...shared, slots: {
+      primary: slot("primary", ["outline"], "outline", true),
+      secondary: slot("secondary", ["lens", "search", "history"], "lens", false),
+      bottom: slot("bottom", [], null, false)
+    } });
+  }
+  if (preset === "review") {
+    return applyLayoutInvariants({ ...shared, slots: {
+      primary: slot("primary", ["outline"], "outline", true),
+      secondary: slot("secondary", ["lens", "search", "history"], "lens", true),
+      bottom: slot("bottom", [], null, false)
+    } });
+  }
+  return applyLayoutInvariants({ ...shared, slots: {
+    primary: slot("primary", ["outline"], "outline", false),
+    secondary: slot("secondary", ["lens", "search"], "search", true),
+    bottom: slot("bottom", ["history"], "history", true)
+  } });
 }
 
 function overlaySlot(base: DockSlotState, raw: Record<string, unknown>, id: SlotId): DockSlotState {
