@@ -69,7 +69,7 @@ export class OpenAIProvider implements LensProvider {
         ? {
             format: {
               type: "json_schema",
-              name: "novel_lens_output",
+              name: "kohon_lens_output",
               strict: true,
               schema: request.output_schema
             }
