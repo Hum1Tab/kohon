@@ -20,11 +20,12 @@ Primary checklist: [Electron security recommendations](https://www.electronjs.or
 | Updates | Installer size is capped at 512 MiB, host/path are allowlisted, and SHA-256 must match GitHub's asset digest or the matching release checksum file before launch. |
 | KOHON migration | The updater accepts only `Hum1Tab/kohon`. New projects use `kohon.json`; legacy manifests remain readable. Existing settings and encrypted credentials are copied only when the KOHON destination is absent, without deleting the source. |
 | Slow close | A four-second save timeout no longer closes silently. The author must choose either to keep waiting or explicitly force exit; recovery drafts remain available. |
+| Packaged runtime | Electron fuses disable `RunAsNode`, `NODE_OPTIONS`, and CLI inspect arguments. Cookie encryption, embedded ASAR integrity validation, and loading the app only from ASAR are enabled. The Windows x64 packaged executable was read back with `@electron/fuses` after packaging. |
 | Dependency scan | `pnpm audit --prod` reported no known vulnerabilities. `pnpm outdated electron --format json` reported no newer configured package on the audit date. |
 
 ## Residual launch gates
 
-- The app still uses `file://`; a privileged custom protocol and Electron fuse hardening remain candidates for the final packaged audit.
+- The app still uses `file://`. Moving to a privileged custom protocol is deferred because it changes navigation and asset loading semantics and needs interactive packaged-app regression coverage.
 - Windows and macOS signing/notarization are not yet proven. SHA-256 verifies downloaded release bytes, but signing is still required for a stable trust chain.
 - `style-src 'unsafe-inline'` is retained for dynamic local styles; script execution remains restricted to self.
 - Run the audit again against the exact lockfile and packaged artifacts immediately before KOHON 0.1.0 publication.
