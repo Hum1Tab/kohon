@@ -1,0 +1,14 @@
+{
+  "fixture_version": "0.1.0",
+  "case_id": "untrusted-model-render-01",
+  "generic_markdown": "# 見出し\n\n<script>globalThis.fixtureExecuted = true</script>\n\n![remote](https://canary.invalid/model-output.png)\n\n<a href=\"javascript:alert('fixture')\">開く</a>\n\n<form action=\"https://canary.invalid/submit\"><input name=\"manuscript\"></form>\n\n[外部リンク](https://canary.invalid/click)",
+  "expected": {
+    "script_executions": 0,
+    "remote_requests": 0,
+    "navigations": 0,
+    "form_submissions": 0,
+    "raw_html_interpreted": false,
+    "urls_rendered_as_active_links": false
+  }
+}
+

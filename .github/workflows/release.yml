@@ -1,0 +1,291 @@
+name: Desktop release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v*.*.* tag to release"
+        required: true
+        type: string
+      publish:
+        description: "Publish an already verified draft without rebuilding"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Match package version to tag
+        shell: bash
+        run: |
+          version="$(node -p "require('./apps/novel-editor/package.json').version")"
+          test "v${version}" = "${RELEASE_TAG}"
+      - name: Typecheck and focused regression tests
+        run: pnpm typecheck && pnpm test
+      - name: Reject high production advisories
+        run: pnpm audit --prod --audit-level high
+
+  prepare:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must match v*.*.*" >&2
+            exit 1
+          fi
+      - name: Create draft release once
+        shell: bash
+        run: |
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft --generate-notes --verify-tag \
+              --notes "署名状態: このReleaseは未署名です。OSの警告を確認し、添付のSHA256SUMSでdownloadを検証してください。"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    if: ${{ github.event_name == 'push' || !inputs.publish }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            arch: x64
+            args: "--win --x64"
+          - runner: macos-15-intel
+            platform: macos
+            arch: x64
+            args: "--mac --x64"
+          - runner: macos-latest
+            platform: macos
+            arch: arm64
+            args: "--mac --arm64"
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            args: "--linux --x64"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+
+      - name: Activate pinned pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure optional code signing
+        shell: bash
+        env:
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -n "${CSC_LINK_SECRET}" ]]; then
+            printf 'CSC_LINK=%s\n' "${CSC_LINK_SECRET}" >> "${GITHUB_ENV}"
+            if [[ -n "${CSC_KEY_PASSWORD_SECRET}" ]]; then
+              printf 'CSC_KEY_PASSWORD=%s\n' "${CSC_KEY_PASSWORD_SECRET}" >> "${GITHUB_ENV}"
+            fi
+          else
+            printf 'CSC_IDENTITY_AUTO_DISCOVERY=false\n' >> "${GITHUB_ENV}"
+          fi
+          if [[ -n "${APPLE_ID_SECRET}" ]]; then
+            printf 'APPLE_ID=%s\n' "${APPLE_ID_SECRET}" >> "${GITHUB_ENV}"
+          fi
+          if [[ -n "${APPLE_APP_SPECIFIC_PASSWORD_SECRET}" ]]; then
+            printf 'APPLE_APP_SPECIFIC_PASSWORD=%s\n' "${APPLE_APP_SPECIFIC_PASSWORD_SECRET}" >> "${GITHUB_ENV}"
+          fi
+          if [[ -n "${APPLE_TEAM_ID_SECRET}" ]]; then
+            printf 'APPLE_TEAM_ID=%s\n' "${APPLE_TEAM_ID_SECRET}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Build installer
+        run: pnpm desktop:dist -- ${{ matrix.args }}
+
+      - name: Create platform checksum
+        shell: bash
+        run: |
+          cd apps/novel-editor/release
+          files=()
+          while IFS= read -r -d '' file; do files+=("$file"); done < <(find . -maxdepth 1 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" \) -print0 | sort -z)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No installer files were produced" >&2
+            exit 1
+          fi
+          checksum_file="SHA256SUMS-${{ matrix.platform }}-${{ matrix.arch }}.txt"
+          : > "${checksum_file}"
+          for file in "${files[@]}"; do
+            if command -v sha256sum >/dev/null 2>&1; then
+              digest="$(sha256sum "${file}" | awk '{print $1}')"
+            else
+              digest="$(shasum -a 256 "${file}" | awk '{print $1}')"
+            fi
+            printf '%s  %s\n' "${digest}" "${file#./}" >> "${checksum_file}"
+          done
+
+      - name: Record production dependency licenses
+        shell: bash
+        run: pnpm licenses list --prod --json > "apps/novel-editor/release/THIRD_PARTY_LICENSES-${{ matrix.platform }}-${{ matrix.arch }}.json"
+
+      - name: Upload installers to draft release
+        shell: bash
+        run: |
+          cd apps/novel-editor/release
+          files=()
+          while IFS= read -r -d '' file; do files+=("$file"); done < <(find . -maxdepth 1 -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "SHA256SUMS-*" -o -name "THIRD_PARTY_LICENSES-*" \) -print0 | sort -z)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No release files were produced" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            uploaded=false
+            for attempt in 1 2 3; do
+              if gh release upload "${RELEASE_TAG}" "$file" --repo "${GITHUB_REPOSITORY}" --clobber; then
+                uploaded=true
+                break
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                sleep $((attempt * 10))
+              fi
+            done
+            if [[ "$uploaded" != true ]]; then
+              echo "Failed to upload $file after 3 attempts" >&2
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    needs: build
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.publish && needs.build.result == 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Validate completed draft artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must match v*.*.*" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          package_version="$(node -p "require('./apps/novel-editor/package.json').version")"
+          if [[ "${package_version}" != "${version}" ]]; then
+            echo "Tag ${RELEASE_TAG} does not match package version ${package_version}" >&2
+            exit 1
+          fi
+          release_json="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,assets)"
+          if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != "true" ]]; then
+            echo "Release is not an unpublished draft" >&2
+            exit 1
+          fi
+          names="$(jq -r '.assets[].name' <<<"${release_json}")"
+          required=(
+            "KOHON-${version}-windows-x64-setup.exe"
+            "KOHON-${version}-windows-x64-portable.exe"
+            "KOHON-${version}-mac-x64.dmg"
+            "KOHON-${version}-mac-x64.zip"
+            "KOHON-${version}-mac-arm64.dmg"
+            "KOHON-${version}-mac-arm64.zip"
+            "KOHON-${version}-linux-x64.AppImage"
+            "KOHON-${version}-linux-x64.deb"
+            "SHA256SUMS-windows-x64.txt"
+            "SHA256SUMS-macos-x64.txt"
+            "SHA256SUMS-macos-arm64.txt"
+            "SHA256SUMS-linux-x64.txt"
+            "THIRD_PARTY_LICENSES-windows-x64.json"
+            "THIRD_PARTY_LICENSES-macos-x64.json"
+            "THIRD_PARTY_LICENSES-macos-arm64.json"
+            "THIRD_PARTY_LICENSES-linux-x64.json"
+          )
+          for asset in "${required[@]}"; do
+            if ! grep -Fxq "${asset}" <<<"${names}"; then
+              echo "Missing release asset: ${asset}" >&2
+              exit 1
+            fi
+          done
+
+          mkdir release-checksums
+          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-checksums --pattern 'SHA256SUMS-*.txt'
+          declare -A checksum_assets=(
+            ["SHA256SUMS-windows-x64.txt"]="KOHON-${version}-windows-x64-setup.exe KOHON-${version}-windows-x64-portable.exe"
+            ["SHA256SUMS-macos-x64.txt"]="KOHON-${version}-mac-x64.dmg KOHON-${version}-mac-x64.zip"
+            ["SHA256SUMS-macos-arm64.txt"]="KOHON-${version}-mac-arm64.dmg KOHON-${version}-mac-arm64.zip"
+            ["SHA256SUMS-linux-x64.txt"]="KOHON-${version}-linux-x64.AppImage KOHON-${version}-linux-x64.deb"
+          )
+          for checksum_file in "${!checksum_assets[@]}"; do
+            if grep -Eq '  (\./|.*/)' "release-checksums/${checksum_file}"; then
+              echo "Checksum file contains a path instead of an asset basename: ${checksum_file}" >&2
+              exit 1
+            fi
+            for asset in ${checksum_assets[$checksum_file]}; do
+              if ! grep -Eq "^[a-fA-F0-9]{64}  ${asset}$" "release-checksums/${checksum_file}"; then
+                echo "Checksum entry is missing or malformed: ${asset}" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Publish verified release
+        run: gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ github.token }}

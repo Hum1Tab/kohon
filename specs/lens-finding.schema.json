@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:novel-lens:gate-a:schema:lens-finding:0.1.0",
+  "title": "Locally validated lens finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "finding_id",
+    "snapshot_id",
+    "lens_id",
+    "lens_version",
+    "category",
+    "claim",
+    "reader_effect",
+    "salience",
+    "model_confidence",
+    "alternative_interpretations",
+    "evidence",
+    "validation_status",
+    "duplicate_of",
+    "author_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "finding_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "snapshot_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "lens_id": {
+      "enum": [
+        "first-reader",
+        "consistency-candidate"
+      ]
+    },
+    "lens_version": {
+      "const": "0.1"
+    },
+    "category": {
+      "enum": [
+        "reader-confusion",
+        "speaker-ambiguity",
+        "emotional-jump",
+        "motivation-gap",
+        "timeline-candidate",
+        "location-candidate",
+        "knowledge-candidate",
+        "continuity-candidate",
+        "intentional-ambiguity-candidate",
+        "other"
+      ]
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200
+    },
+    "reader_effect": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200
+    },
+    "salience": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "model_confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "alternative_interpretations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/validated_evidence"
+      }
+    },
+    "validation_status": {
+      "enum": [
+        "valid",
+        "invalid",
+        "stale",
+        "ambiguous"
+      ]
+    },
+    "duplicate_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "author_status": {
+      "enum": [
+        "unreviewed",
+        "useful",
+        "rejected",
+        "intentional",
+        "unclear",
+        "misleading",
+        "resolved"
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "validated_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "document_text_sha256",
+        "exact_text",
+        "start_utf16",
+        "end_utf16",
+        "prefix",
+        "suffix",
+        "occurrence_count",
+        "anchor_status"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+        },
+        "document_text_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "exact_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 800
+        },
+        "start_utf16": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "end_utf16": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "prefix": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "suffix": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "occurrence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "anchor_status": {
+          "enum": [
+            "attached",
+            "missing",
+            "ambiguous",
+            "source-version-mismatch"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "name": "@kohon/desktop",
+  "version": "0.1.0",
+  "description": "作者所有のMarkdown原稿、復元可能な履歴、根拠付きAIレンズを備えた日本語小説制作環境",
+  "author": "KOHON contributors",
+  "homepage": "https://github.com/Hum1Tab/kohon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hum1Tab/kohon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hum1Tab/kohon/issues"
+  },
+  "desktopName": "kohon",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist-main/index.cjs",
+  "scripts": {
+    "build": "pnpm build:renderer && pnpm build:main",
+    "build:renderer": "vite build",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist-main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist-preload/index.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "electron .",
+    "dev": "pnpm build && electron .",
+    "dist": "pnpm build && electron-builder",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('dist-main',{recursive:true,force:true});require('node:fs').rmSync('dist-preload',{recursive:true,force:true});require('node:fs').rmSync('release',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@kohon/editor-core": "workspace:*",
+    "@kohon/project-store": "workspace:*",
+    "@openai/codex": "0.152.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  },
+  "build": {
+    "appId": "io.github.hum1tab.kohon",
+    "productName": "KOHON",
+    "executableName": "kohon",
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "asarUnpack": [
+      "node_modules/@openai/codex-*/vendor/**/*"
+    ],
+    "artifactName": "KOHON-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-main/**/*",
+      "dist-preload/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "../../LICENSE", "to": "LICENSE" },
+      { "from": "../../NOTICE", "to": "NOTICE" }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "artifactName": "KOHON-${version}-windows-${arch}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "KOHON-${version}-windows-${arch}-portable.${ext}"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "maintainer": "KOHON contributors",
+      "syncDesktopName": true,
+      "synopsis": "Local-first Japanese novel writing environment"
+    }
+  }
+}

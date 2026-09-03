@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:novel-lens:gate-a:schema:evidence-review:0.1.0",
+  "title": "Condition-blind independent review of one output claim unit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "study_id",
+    "study_version",
+    "calibration_batch_id",
+    "rater_id",
+    "pair_id",
+    "blind_label",
+    "run_id",
+    "unit_id",
+    "unit_index",
+    "unit_hash",
+    "citation_exact",
+    "claim_supported",
+    "primary_issue",
+    "false_critical",
+    "future_leak",
+    "actionable_without_rewrite",
+    "voice_homogenization",
+    "severity_of_harm",
+    "condition_guess",
+    "guess_confidence",
+    "rater_note_redacted",
+    "adjudication_status",
+    "adjudicated_review_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "study_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "study_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "calibration_batch_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "rater_id": {
+      "type": "string",
+      "pattern": "^R-[A-Z0-9]{4,16}$"
+    },
+    "pair_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "blind_label": {
+      "enum": [
+        "A",
+        "B"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "unit_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "unit_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unit_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "citation_exact": {
+      "enum": [
+        "yes",
+        "no",
+        "not-displayed"
+      ]
+    },
+    "claim_supported": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "primary_issue": {
+      "enum": [
+        "yes",
+        "no",
+        "not-applicable"
+      ]
+    },
+    "false_critical": {
+      "type": "boolean"
+    },
+    "future_leak": {
+      "type": "boolean"
+    },
+    "actionable_without_rewrite": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "voice_homogenization": {
+      "type": "boolean"
+    },
+    "severity_of_harm": {
+      "enum": [
+        "none",
+        "minor",
+        "major"
+      ]
+    },
+    "condition_guess": {
+      "enum": [
+        "generic",
+        "lens",
+        "cannot-tell"
+      ]
+    },
+    "guess_confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "rater_note_redacted": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2000
+    },
+    "adjudication_status": {
+      "enum": [
+        "independent",
+        "agreement",
+        "needs-adjudication",
+        "adjudicated"
+      ]
+    },
+    "adjudicated_review_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

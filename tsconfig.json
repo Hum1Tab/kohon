@@ -1,0 +1,32 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/contracts"
+    },
+    {
+      "path": "./packages/lens-core"
+    },
+    {
+      "path": "./packages/provider-mock"
+    },
+    {
+      "path": "./packages/provider-openai"
+    },
+    {
+      "path": "./packages/history-git"
+    },
+    {
+      "path": "./packages/editor-core"
+    },
+    {
+      "path": "./packages/project-store"
+    },
+    {
+      "path": "./apps/gate-a-pilot"
+    },
+    {
+      "path": "./apps/gate-a-pilot/tsconfig.server.json"
+    }
+  ]
+}

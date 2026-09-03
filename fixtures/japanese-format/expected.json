@@ -1,0 +1,27 @@
+{
+  "fixture_version": "0.1.0",
+  "path": "golden.md",
+  "encoding": "utf-8",
+  "newline_style": "lf",
+  "required_exact_substrings": [
+    "　𠮷野は、古い手帳を開いた。",
+    "｜東京《とうきょう》",
+    "……",
+    "――",
+    "《《忘れるな》》",
+    "全角ＡＢＣ　１２３",
+    "🖋️",
+    "が"
+  ],
+  "forbidden_transformations": [
+    "Unicode normalization",
+    "newline normalization",
+    "full-width space trimming",
+    "ruby syntax rewriting",
+    "smart punctuation replacement"
+  ],
+  "hashes": {
+    "source_byte_sha256": "7dcad7f9958d7c9eaf2786f2fa167dd891e8048ec806439522bcf66b73150d99",
+    "text_sha256": "7dcad7f9958d7c9eaf2786f2fa167dd891e8048ec806439522bcf66b73150d99"
+  }
+}

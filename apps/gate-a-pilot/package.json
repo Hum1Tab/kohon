@@ -1,0 +1,28 @@
+{
+  "name": "@kohon/gate-a-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "build:client": "vite build",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('dist-server',{recursive:true,force:true});require('node:fs').rmSync('tsconfig.tsbuildinfo',{force:true});require('node:fs').rmSync('tsconfig.server.tsbuildinfo',{force:true})\"",
+    "dev": "pnpm build:client && tsx watch src/server/index.ts",
+    "start": "node dist-server/server/index.js"
+  },
+  "dependencies": {
+    "@kohon/contracts": "workspace:*",
+    "@kohon/core": "workspace:*",
+    "@kohon/provider-mock": "workspace:*",
+    "@kohon/provider-openai": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.2"
+  }
+}

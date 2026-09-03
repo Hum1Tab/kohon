@@ -1,0 +1,39 @@
+{
+  "fixture_version": "0.1.0",
+  "case_id": "C1-XX",
+  "status": "draft",
+  "primary_issue": "REPLACE_ME",
+  "secondary_issues": [],
+  "genre": "REPLACE_ME",
+  "point_of_view": "REPLACE_ME",
+  "documents": [
+    {
+      "document_id": "scene-01",
+      "order": 0,
+      "path": "scene-01.md"
+    }
+  ],
+  "cutoff_document_id": "scene-01",
+  "query_id": "REPLACE_ME",
+  "query_text": "REPLACE_ME",
+  "sealed_author_intent": {
+    "primary_issue_description": "REPLACE_ME",
+    "intentional": false,
+    "future_only_facts": [],
+    "forbidden_conclusions": []
+  },
+  "annotation": {
+    "annotator_a_status": "pending",
+    "annotator_b_status": "pending",
+    "evidence_spans": [],
+    "acceptable_alternatives": [],
+    "disagreements": [],
+    "adjudication_status": "pending"
+  },
+  "hashes": {
+    "source_snapshot_id": "REPLACE_AFTER_FREEZE",
+    "manifest_sha256": "REPLACE_AFTER_FREEZE"
+  },
+  "license_review": "pending"
+}
+

@@ -1,0 +1,7 @@
+KOHON (formerly Novel Lens)
+Copyright 2026 KOHON and Novel Lens contributors
+
+This product includes software developed by the Electron, React, Vite,
+TypeScript, Vitest, and electron-builder projects. Their license texts and
+package metadata are available from the locked dependency graph in the source
+distribution.

@@ -1,0 +1,31 @@
+node_modules/
+.pnpm-store/
+.cache/
+dist/
+dist-*/
+coverage/
+.vite/
+*.tsbuildinfo
+**/release/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Research and manuscript data must never enter Git
+gate-a-private/
+.novel-lens-data/
+research/private/
+research/sessions/
+research/exports/
+**/participant-data/
+**/*.session-private.json
+
+# Operating-system and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,50 @@
+{
+  "fixture_version": "0.1.0",
+  "cases": [
+    {
+      "case_id": "lf",
+      "text": "一行目\n二行目\n",
+      "expected_newline_style": "lf"
+    },
+    {
+      "case_id": "crlf",
+      "text": "一行目\r\n二行目\r\n",
+      "expected_newline_style": "crlf"
+    },
+    {
+      "case_id": "mixed",
+      "text": "一行目\r\n二行目\n三行目\r",
+      "expected_newline_style": "mixed"
+    },
+    {
+      "case_id": "nfc",
+      "text": "が",
+      "code_points_hex": [
+        "304C"
+      ],
+      "expected_unicode_normalization": "nfc"
+    },
+    {
+      "case_id": "nfd",
+      "text": "が",
+      "code_points_hex": [
+        "304B",
+        "3099"
+      ],
+      "expected_unicode_normalization": "nfd"
+    },
+    {
+      "case_id": "supplementary-plane",
+      "text": "A𠮷B",
+      "expected_utf16_length": 4,
+      "expected_code_point_count": 3
+    },
+    {
+      "case_id": "bom-policy",
+      "base64_source_bytes": "77u/5LiA6KGM55uuCg==",
+      "decoded_text_after_bom_removal": "一行目\n",
+      "expected_bom": true
+    }
+  ]
+}
+

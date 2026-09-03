@@ -1,0 +1,36 @@
+{
+  "name": "kohon",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.17.0 <25",
+    "pnpm": ">=11.19.0 <12"
+  },
+  "scripts": {
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "clean": "pnpm -r run clean",
+    "dev": "pnpm desktop:dev",
+    "start": "pnpm desktop",
+    "desktop": "pnpm --filter @kohon/desktop start",
+    "desktop:dev": "pnpm --filter @kohon/editor-core build && pnpm --filter @kohon/project-store build && pnpm --filter @kohon/desktop dev",
+    "desktop:dist": "node scripts/desktop-dist.mjs",
+    "pilot:dev": "pnpm -r --workspace-concurrency=1 --filter './packages/*' build && pnpm --filter @kohon/gate-a-pilot dev",
+    "pilot:start": "pnpm --filter @kohon/gate-a-pilot start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "benchmark:editor": "tsx scripts/benchmark-editor-input.ts",
+    "typecheck": "tsc -b --pretty false && pnpm --filter @kohon/desktop typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.11",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

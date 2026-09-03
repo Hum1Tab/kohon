@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:novel-lens:gate-a:schema:lens-output:0.1.0",
+  "title": "Untrusted structured output returned by a lens model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lens_id",
+    "lens_version",
+    "scope_note",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "lens_id": {
+      "enum": [
+        "first-reader",
+        "consistency-candidate"
+      ]
+    },
+    "lens_version": {
+      "const": "0.1"
+    },
+    "scope_note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/model_finding"
+      }
+    }
+  },
+  "$defs": {
+    "model_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "claim",
+        "reader_effect",
+        "salience",
+        "model_confidence",
+        "alternative_interpretations",
+        "evidence"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "reader-confusion",
+            "speaker-ambiguity",
+            "emotional-jump",
+            "motivation-gap",
+            "timeline-candidate",
+            "location-candidate",
+            "knowledge-candidate",
+            "continuity-candidate",
+            "intentional-ambiguity-candidate",
+            "other"
+          ]
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "reader_effect": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "salience": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "model_confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "alternative_interpretations": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/model_evidence"
+          }
+        }
+      }
+    },
+    "model_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "exact_text"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+        },
+        "exact_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 800
+        }
+      }
+    }
+  }
+}

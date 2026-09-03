@@ -1,0 +1,52 @@
+{
+  "fixture_version": "0.1.0",
+  "source_version": "v1.md",
+  "anchor": {
+    "document_id": "anchor-scene",
+    "exact_text": "時計台の針は、午前零時で止まっていた。",
+    "prefix_text": "　",
+    "suffix_text": "広場に人影はなく、噴水だけが低い音を立てている。"
+  },
+  "cases": [
+    {
+      "path": "v1.md",
+      "expected_status": "attached",
+      "expected_occurrence_count": 1,
+      "expected_start_utf16": 38,
+      "expected_end_utf16": 57,
+      "reason": "Original exact quote."
+    },
+    {
+      "path": "v2-front-insert.md",
+      "expected_status": "reattachment-candidate",
+      "expected_occurrence_count": 1,
+      "expected_start_utf16": 62,
+      "expected_end_utf16": 81,
+      "reason": "Offset changes, exact quote remains unique."
+    },
+    {
+      "path": "v3-moved.md",
+      "expected_status": "reattachment-candidate",
+      "expected_occurrence_count": 1,
+      "expected_start_utf16": 66,
+      "expected_end_utf16": 85,
+      "reason": "Paragraph moves, exact quote remains unique."
+    },
+    {
+      "path": "v4-duplicate.md",
+      "expected_status": "ambiguous",
+      "expected_occurrence_count": 2,
+      "expected_start_utf16": null,
+      "expected_end_utf16": null,
+      "reason": "The complete surrounding passage is duplicated; do not choose one."
+    },
+    {
+      "path": "v5-paraphrased.md",
+      "expected_status": "missing",
+      "expected_occurrence_count": 0,
+      "expected_start_utf16": null,
+      "expected_end_utf16": null,
+      "reason": "Semantic similarity is not sufficient for reattachment."
+    }
+  ]
+}
