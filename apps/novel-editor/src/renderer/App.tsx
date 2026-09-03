@@ -706,7 +706,6 @@ export function App(): ReactNode {
     setCheckpoints([]);
     setHistoryDiff(null);
     setError(reviewWarning);
-    setNotice(locale === "en" ? `Opened “${next.manifest.title}”.` : `「${next.manifest.title}」を開きました。`);
     const first = [...next.manifest.chapters].sort((a, b) => a.order - b.order)[0];
     if (first === undefined) {
       textRef.current = "";
@@ -714,7 +713,7 @@ export function App(): ReactNode {
       return;
     }
     await reloadOpenBuffers(next.root, restoredSession);
-  }, [locale, reloadOpenBuffers, t]);
+  }, [reloadOpenBuffers, t]);
 
   const recordEditorView = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
     setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd, scrollTop: editor.scrollTop, scrollLeft: editor.scrollLeft }));

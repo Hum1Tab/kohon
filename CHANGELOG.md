@@ -8,6 +8,7 @@ All notable changes to KOHON are documented here.
 
 - Fixed a React hook-order crash that left the workbench completely blank after opening or creating a project.
 - Restored opening existing `kohon.json` and legacy `novel-lens.json` projects without changing manuscript data.
+- Removed the repetitive project-opened success banner; actionable errors and save warnings remain visible.
 
 ## 0.1.1 - 2026-09-03
 
