@@ -2,6 +2,12 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.2.3 - 2026-09-05
+
+### Fixed
+
+- Fixed ChatGPT/Codex lens runs failing at thread creation because the current App Server protocol expects the legacy `sandbox` mode value `read-only` rather than `readOnly`.
+
 ## 0.2.2 - 2026-09-04
 
 ### Changed

@@ -179,7 +179,7 @@ export class CodexAppServer {
       model: selected.id,
       cwd: this.scratchDirectory,
       approvalPolicy: "never",
-      sandbox: "readOnly",
+      sandbox: "read-only",
       serviceName: "kohon"
     }, 30_000));
     const threadId = stringValue(record(threadResponse["thread"])["id"]);
