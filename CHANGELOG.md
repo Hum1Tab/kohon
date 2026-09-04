@@ -2,6 +2,13 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.2.2 - 2026-09-04
+
+### Changed
+
+- Removed the connection, model, and reading-boundary selectors from the everyday Editorial Lens panel; connection and model choices remain available in Settings where they belong.
+- Editorial Lens now automatically reads through the current chapter, keeps its exact chapter list collapsed until requested, and only shows connection setup when action is required.
+
 ## 0.2.1 - 2026-09-04
 
 ### Changed

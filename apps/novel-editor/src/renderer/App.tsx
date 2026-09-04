@@ -42,7 +42,6 @@ import type {
   LensMessage,
   LensProviderId,
   LensRunResult,
-  LensScopeMode,
   NoteDocument,
   NoteMeta,
   ProjectSettings,
@@ -154,7 +153,6 @@ export function App(): ReactNode {
   const [provider, setProvider] = useState<LensProviderId>("mock");
   const [modelId, setModelId] = useState("gpt-5.6-luna");
   const [lensQuery, setLensQuery] = useState(() => uiText(resolveAppLocale(defaultUserSettings().general.language, window.navigator.language), DEFAULT_QUERY));
-  const [scopeMode, setScopeMode] = useState<LensScopeMode>("through-current");
   const [scopeApproved, setScopeApproved] = useState(false);
   const [threads, setThreads] = useState<Record<RoleId, LensMessage[]>>(EMPTY_THREADS);
   const [lensResult, setLensResult] = useState<LensRunResult | null>(null);
@@ -356,12 +354,10 @@ export function App(): ReactNode {
 
   const scopeChapters = useMemo(() => {
     if (activeIndex < 0) return [];
-    if (scopeMode === "current") return [manifestChapters[activeIndex]!];
-    if (scopeMode === "through-current") return manifestChapters.slice(0, activeIndex + 1);
-    return manifestChapters;
-  }, [activeIndex, manifestChapters, scopeMode]);
+    return manifestChapters.slice(0, activeIndex + 1);
+  }, [activeIndex, manifestChapters]);
 
-  useEffect(() => { setScopeApproved(false); }, [role, scopeMode, activeChapterId, project?.root]);
+  useEffect(() => { setScopeApproved(false); }, [role, activeChapterId, project?.root]);
 
   useEffect(() => { setFindMatchIndex((current) => findMatches.length === 0 ? -1 : Math.min(current, findMatches.length - 1)); }, [findMatches.length]);
 
@@ -1154,9 +1150,11 @@ export function App(): ReactNode {
     try {
       const next = await window.kohon.updateUserSettings(patch);
       setUserSettings(next);
-      if (patch.ai?.defaultProvider !== undefined) setProvider(next.ai.defaultProvider);
-      if (patch.ai?.codexModel !== undefined) setModelId(next.ai.codexModel);
-      else if (patch.ai?.openaiModel !== undefined) setModelId(next.ai.openaiModel);
+      if (patch.ai?.defaultProvider !== undefined) {
+        setProvider(next.ai.defaultProvider);
+        setModelId(next.ai.defaultProvider === "codex" ? next.ai.codexModel : next.ai.defaultProvider === "openai" ? next.ai.openaiModel : "offline-mock-v0.1");
+      } else if (patch.ai?.codexModel !== undefined && next.ai.defaultProvider === "codex") setModelId(next.ai.codexModel);
+      else if (patch.ai?.openaiModel !== undefined && next.ai.defaultProvider === "openai") setModelId(next.ai.openaiModel);
     } catch (cause) { setError(errorText(cause)); throw cause; }
   }, []);
 
@@ -1408,7 +1406,7 @@ export function App(): ReactNode {
       await saveAllBuffers();
       const userMessage: LensMessage = { sender: "author", text: query, createdAt: new Date().toISOString() };
       const conversation = [...threads[role], userMessage];
-      const result = await window.kohon.runLens({ root: project.root, role, query, scope: scopeMode, cutoffChapterId: scopeMode === "all" ? null : activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
+      const result = await window.kohon.runLens({ root: project.root, role, query, scope: "through-current", cutoffChapterId: activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
       setLensResult(result);
       if (result.ledgerStored === false) setError(`${t("AIの回答は表示できますが、指摘台帳へ保存できませんでした。")} ${result.ledgerMessage ?? ""}`);
       else {
@@ -1420,7 +1418,7 @@ export function App(): ReactNode {
       setLensQuery("");
     } catch (cause) { setError(errorText(cause)); }
     finally { setLensBusy(false); }
-  }, [activeChapterId, lensQuery, modelId, project, provider, role, saveAllBuffers, scopeApproved, scopeChapters, scopeMode, t, threads]);
+  }, [activeChapterId, lensQuery, modelId, project, provider, role, saveAllBuffers, scopeApproved, scopeChapters, t, threads]);
 
   const jumpToFinding = useCallback(async (finding: LensFinding): Promise<void> => {
     if (finding.chapterId === null || finding.startUtf16 === null || finding.endUtf16 === null || finding.anchorStatus !== "attached") return;
@@ -1750,8 +1748,8 @@ export function App(): ReactNode {
       <div className="outline-footer"><code title={project.root}>{project.root}</code><span>{t("Markdown正本")}</span></div>
     </div>;
     if (view === "lens") return <LensPanel
-      role={role} setRole={setRole} provider={provider} setProvider={(next) => { setProvider(next); setModelId(next === "codex" ? userSettings.ai.codexModel : next === "openai" ? userSettings.ai.openaiModel : "offline-mock-v0.1"); }} modelId={modelId} setModelId={(value) => { setModelId(value); if (provider === "codex") void updateUserSettings({ ai: { codexModel: value } }); }} codexModels={connections.codex.models} codexConnected={connections.codex.connected} openAIConnected={connections.openai.connected} onOpenSettings={() => openSettings("ai")}
-      query={lensQuery} setQuery={setLensQuery} scopeMode={scopeMode} setScopeMode={setScopeMode} scopeTitles={scopeChapters.map((item) => item.title)}
+      role={role} setRole={setRole} provider={provider} codexConnected={connections.codex.connected} openAIConnected={connections.openai.connected} onOpenSettings={() => openSettings("ai")}
+      query={lensQuery} setQuery={setLensQuery} scopeTitles={scopeChapters.map((item) => item.title)}
       approved={scopeApproved} setApproved={setScopeApproved} thread={threads[role]} result={lensResult?.role === role ? lensResult : null}
       running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
       reviews={reviewFindings} onReview={jumpToReviewFinding} onReviewStatus={updateReviewStatus} onReviewRecheck={recheckReview}

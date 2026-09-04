@@ -7,12 +7,10 @@ import type {
   ChapterMetadata,
   ChapterStatus,
   CheckpointEntry,
-  CodexModelOption,
   LensFinding,
   LensMessage,
   LensProviderId,
   LensRunResult,
-  LensScopeMode,
   NoteDocument,
   NoteKind,
   NoteMeta,
@@ -185,9 +183,9 @@ export function OutlineNotes({ notes, activeChapterId, activeNote, draft, saveSt
 }
 
 export interface LensPanelProps {
-  role: RoleId; setRole: (role: RoleId) => void; provider: LensProviderId; setProvider: (provider: LensProviderId) => void;
-  modelId: string; setModelId: (value: string) => void; codexModels: CodexModelOption[]; codexConnected: boolean; openAIConnected: boolean; onOpenSettings: () => void;
-  query: string; setQuery: (value: string) => void; scopeMode: LensScopeMode; setScopeMode: (value: LensScopeMode) => void;
+  role: RoleId; setRole: (role: RoleId) => void; provider: LensProviderId;
+  codexConnected: boolean; openAIConnected: boolean; onOpenSettings: () => void;
+  query: string; setQuery: (value: string) => void;
   scopeTitles: string[]; approved: boolean; setApproved: (value: boolean) => void; thread: LensMessage[]; result: LensRunResult | null;
   running: boolean; onRun: () => void; onClear: () => void; onFinding: (finding: LensFinding) => void;
   reviews: ReviewLedgerEntry[]; onReview: (finding: ReviewLedgerEntry) => void; onReviewStatus: (id: string, status: ReviewStatus) => void; onReviewRecheck: (id: string) => void;
@@ -197,16 +195,15 @@ export function LensPanel(props: LensPanelProps): ReactNode {
   const { locale, t } = useLocale();
   const definition = getRole(props.role);
   const visibleReviews = props.reviews.slice(0, 200);
+  const connectionMissing = (props.provider === "codex" && !props.codexConnected) || (props.provider === "openai" && !props.openAIConnected);
   return <div className="inspector-content lens-panel">
     <div className="section-head"><div><span className="eyebrow">{t("SYNTHETIC READER")}</span><h2>{t("編集レンズ")}</h2></div>{props.thread.length > 0 && <button className="text-button" onClick={props.onClear}>{t("会話を消す")}</button>}</div>
     <div className="role-grid">{ROLE_IDS.map((id) => <button key={id} className={props.role === id ? "role active" : "role"} title={t(getRole(id).description)} onClick={() => props.setRole(id)}>{t(getRole(id).label)}</button>)}</div>
     <p className="role-description">{t(definition.description)}</p>
     <section className="lens-compose" aria-label={t("編集レンズへ質問")}>
     <label>{t("質問")}<textarea rows={3} value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder={t(DEFAULT_QUERY)} /></label>
-    <div className="form-row"><label>{t("接続")}<select value={props.provider} onChange={(event) => props.setProvider(event.target.value as LensProviderId)}><option value="codex">{t("ChatGPT（Codex枠）")}</option><option value="mock">{t("Offline Mock")}</option><option value="openai">{t("OpenAI API")}</option></select></label><label>{t("読了位置")}<select value={props.scopeMode} onChange={(event) => props.setScopeMode(event.target.value as LensScopeMode)}><option value="current">{t("現在の章だけ")}</option><option value="through-current">{t("現在の章まで")}</option><option value="all">{t("全章")}</option></select></label></div>
-    {props.provider === "codex" && <div className="lens-connection"><label>{t("モデル")}<select value={props.modelId} onChange={(event) => props.setModelId(event.target.value)}>{props.codexModels.length === 0 && <option value={props.modelId}>{props.modelId}</option>}{props.codexModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}{model.id === "gpt-5.6-luna" ? `（${t("節約")}）` : ""}</option>)}</select></label><div className="lens-connection-state"><span className={props.codexConnected ? "connected" : "disconnected"}>{t(props.codexConnected ? "ChatGPT接続済み" : "ChatGPT未接続")}</span><button className="text-button" onClick={props.onOpenSettings}>{t("接続設定を開く")}</button></div></div>}
-    {props.provider === "openai" && <div className="lens-connection"><label>{t("Model ID")}<input value={props.modelId} onChange={(event) => props.setModelId(event.target.value)} /></label><div className="lens-connection-state"><span className={props.openAIConnected ? "connected" : "disconnected"}>{t(props.openAIConnected ? "OpenAI接続済み" : "OpenAI未接続")}</span><button className="text-button" onClick={props.onOpenSettings}>{t("接続設定を開く")}</button></div></div>}
-    <details className="scope-preview" open><summary>{t("送信範囲")}: {formatNumber(props.scopeTitles.length, locale)}{t("章")}</summary><ul>{props.scopeTitles.map((title) => <li key={title}>{title}</li>)}</ul><p>{t("未選択章、設定画面、履歴、ファイルパスは送信しません。")}</p></details>
+    {connectionMissing && <div className="lens-setup-warning"><span>{t(props.provider === "codex" ? "ChatGPT未接続" : "OpenAI未接続")}</span><button className="text-button" onClick={props.onOpenSettings}>{t("接続設定を開く")}</button></div>}
+    <details className="scope-preview"><summary>{t("送信範囲")}: {formatNumber(props.scopeTitles.length, locale)}{t("章")}</summary><ul>{props.scopeTitles.map((title) => <li key={title}>{title}</li>)}</ul><p>{t("未選択章、設定画面、履歴、ファイルパスは送信しません。")}</p></details>
     <label className="check"><input type="checkbox" checked={props.approved} onChange={(event) => props.setApproved(event.target.checked)} /> {t("表示された章だけを送信することを確認しました")}</label>
     <button className="primary full" disabled={props.running || !props.approved || props.query.trim().length === 0 || (props.provider === "codex" && !props.codexConnected) || (props.provider === "openai" && !props.openAIConnected)} onClick={props.onRun}>{props.running ? t("検証しながら読んでいます…") : `${t(definition.label)}${t("に聞く")}`}</button>
     <p className="privacy-note">{t("本文の生成・書換え・自動適用は行いません。会話と認証情報はprojectへ保存しません。")}</p>

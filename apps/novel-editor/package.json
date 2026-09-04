@@ -1,6 +1,6 @@
 {
   "name": "@kohon/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "作者所有のMarkdown原稿、復元可能な履歴、根拠付きAIレンズを備えた日本語小説制作環境",
   "author": "KOHON contributors",
   "homepage": "https://github.com/Hum1Tab/kohon",
