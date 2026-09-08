@@ -70,7 +70,7 @@ function split(id: string, direction: DockSplitNode["direction"], children: Dock
 
 export function defaultLayout(): LayoutPreferences {
   return {
-    root: split("root", "horizontal", [tabs("primary", ["outline"]), editor(), tabs("secondary", [...TOOL_VIEWS])], [252, 760, 380]),
+    root: split("root", "horizontal", [tabs("primary", ["outline"]), editor(), tabs("secondary", [...TOOL_VIEWS], false)], [252, 760, 380]),
     activityBar: "left", activityBarVisible: true, zenMode: false,
     primarySide: "left", secondarySameSide: false,
     bottomPanelAlignment: "editor", bottomPanelMaximized: false
@@ -309,6 +309,9 @@ export function applyLayoutPreset(layout: LayoutPreferences, preset: LayoutPrese
   if (preset === "writing") {
     const secondary = findViewNode(next, "lens");
     if (secondary !== null) next.root = setTabsVisibility(next, secondary.id, false).root;
+  } else if (preset === "review") {
+    const secondary = findViewNode(next, "lens");
+    if (secondary !== null) next.root = setTabsVisibility(next, secondary.id, true).root;
   } else if (preset === "compare") {
     next.root = split("root-vertical", "vertical", [
       split("root", "horizontal", [tabs("primary", ["outline"], false), editor(), tabs("secondary", ["lens", "search"], true, "search")], [252, 760, 380]),
@@ -316,6 +319,22 @@ export function applyLayoutPreset(layout: LayoutPreferences, preset: LayoutPrese
     ], [3, 1]);
   }
   return sanitizeLayout(next as unknown as Record<string, unknown>);
+}
+
+/** Custom arrangements must not be mislabeled as a preset; ignore only split sizes and node IDs. */
+export function activeLayoutPreset(layout: LayoutPreferences): LayoutPreset | null {
+  if (layout.zenMode) return null;
+  const shape = (node: DockNode): unknown => node.type === "editor" ? "editor" : node.type === "tabs"
+    ? { views: node.views, activeView: node.activeView, visible: node.visible }
+    : { direction: node.direction, children: node.children.map(shape) };
+  const current = JSON.stringify(shape(layout.root));
+  return (["writing", "review", "compare"] as const).find((preset) => JSON.stringify(shape(applyLayoutPreset(layout, preset).root)) === current) ?? null;
+}
+
+/** Flex factors summing to less than one leave unused space when a sibling is hidden.
+ * Normalize visible children only, preserving their relative widths/heights. */
+export function dockFlexWeights(weights: readonly number[]): number[] {
+  return normalizeSizes(weights, weights.length).map((weight) => weight * 100);
 }
 
 /** Legacy helpers kept while older renderer code and settings are migrated. */

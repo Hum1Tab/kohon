@@ -2,6 +2,7 @@ import { textStats, type TextStats } from "@kohon/editor-core";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
+import { dockFlexWeights } from "../shared/layout.js";
 import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConflict, editBuffer, loadBuffer, pruneBuffers, saveFailed, saveSucceeded, type EditorBuffersState } from "../shared/editor-buffers.js";
 import { closeEditorGroup, closeEditorTab, defaultEditorSession, moveEditorTab, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
@@ -47,6 +48,7 @@ import type {
   ProjectSettings,
   ProjectDiff,
   ProjectSummary,
+  RecentProject,
   RecoveryDraftResult,
   ReviewLedgerEntry,
   ReviewStatus,
@@ -60,7 +62,8 @@ import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 import { EditorPane } from "./EditorPane.js";
-import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, Welcome, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
+import { ProjectHome } from "./ProjectHome.js";
+import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
 import { LocaleProvider } from "./LocaleContext.js";
 
 type QuickAccessMode = "commands" | "chapters";
@@ -83,9 +86,9 @@ interface ViewMenuState {
 }
 
 const VIEW_LABELS: Record<ViewId, string> = {
-  outline: "章・場面",
-  lens: "編集レンズ",
-  search: "作品内検索",
+  outline: "ファイル",
+  lens: "レンズ",
+  search: "検索",
   history: "履歴"
 };
 
@@ -131,6 +134,7 @@ export function App(): ReactNode {
   const [connections, setConnections] = useState<ConnectionStatus>(DEFAULT_CONNECTIONS);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [project, setProject] = useState<ProjectSummary | null>(null);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
   const [editorSession, setEditorSession] = useState<EditorSessionState>(() => defaultEditorSession());
   const [editorBuffers, setEditorBuffers] = useState<EditorBuffersState>(() => createEditorBuffers());
   const [editorStats, setEditorStats] = useState<Record<string, TextStats>>({});
@@ -285,6 +289,7 @@ export function App(): ReactNode {
 
   useEffect(() => {
     void window.kohon.appInfo().then(setAppInfo).catch(() => undefined);
+    void window.kohon.recentProjects().then(setRecentProjects).catch(() => undefined);
     void window.kohon.connectionStatus().then(setConnections).catch(() => undefined);
     void window.kohon.getUserSettings().then((loaded) => {
       setUserSettings(loaded);
@@ -670,6 +675,7 @@ export function App(): ReactNode {
 
   const adoptProject = useCallback(async (next: ProjectSummary | null): Promise<void> => {
     if (next === null) return;
+    void window.kohon.recentProjects().then(setRecentProjects).catch(() => undefined);
     const restoredSession = await window.kohon.readEditorSession(next.root);
     let restoredReviews: ReviewLedgerEntry[] = [];
     let restoredNotes: NoteMeta[] = [];
@@ -795,6 +801,13 @@ export function App(): ReactNode {
     catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
   }, [adoptProject, clearMessages, saveAllBuffers]);
+
+  const openRecentProject = useCallback(async (root: string): Promise<void> => {
+    clearMessages(); setBusy(true);
+    try { await saveAllBuffers(); await adoptProject(await window.kohon.openRecentProject(root)); }
+    catch (cause) { setError(`${errorText(cause)} ${t("保存先が変わった場合は「別の作品を開く」から選び直してください。")}`); }
+    finally { setBusy(false); }
+  }, [adoptProject, clearMessages, saveAllBuffers, t]);
 
   const exportProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -1577,6 +1590,20 @@ export function App(): ReactNode {
 
   useEffect(() => window.kohon.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
 
+  const returnHome = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await flushBeforeClose();
+      setRecentProjects(await window.kohon.recentProjects());
+      setProject(null);
+      setLayoutMenuOpen(false);
+      setViewMenu(null);
+      clearMessages();
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(false); }
+  };
+
   const layout = userSettings.layout;
   const activityVisible = !layout.zenMode && layout.activityBarVisible;
   const workspaceStyle = {
@@ -1716,7 +1743,7 @@ export function App(): ReactNode {
   }, [updateBufferText]);
 
   if (project === null) return <LocaleProvider locale={locale}><div className={shellClass} style={shellStyle}>
-    <Welcome appInfo={appInfo} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onSettings={() => openSettings("appearance")} />
+    <ProjectHome appInfo={appInfo} recent={recentProjects} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onOpenRecent={(root) => void openRecentProject(root)} onSettings={() => openSettings("appearance")} />
     {promptDialog}
     {settingsOverlay}
     {quickAccessOverlay}
@@ -1733,7 +1760,7 @@ export function App(): ReactNode {
         onKeyDown={(event) => handleViewMenuKey("outline", event)}
         tabIndex={0}
         title={t("ドラッグで移動。Shift+F10で配置メニュー")}
-      ><span className="eyebrow">MANUSCRIPT</span><h2>{t("章・場面")}</h2></div><div className="pane-tools"><button className="icon-button import-button" title={t("TXT / Markdownを取り込む")} aria-label={t("TXTまたはMarkdownを取り込む")} onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title={t("章を追加")} onClick={() => void addChapter("chapter")}>{t("＋章")}</button><button className="outline-add-button" title={t("場面を追加")} onClick={() => void addChapter("scene")}>{t("＋場面")}</button></div></div>
+      ><span className="eyebrow">MANUSCRIPT</span><h2>{t("章・場面")}</h2></div><details className="outline-create-menu"><summary aria-label={t("章を追加")} title={t("章を追加")}>＋</summary><div><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void addChapter("chapter"); }}>{t("章を追加")}</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void addChapter("scene"); }}>{t("場面を追加")}</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void importDocuments(); }}>{t("TXT / Markdownを取り込む")}</button></div></details></div>
       <nav className="chapter-list" aria-label={t("章・場面")} onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
         {manifestChapters.map((item, index) => {
           const kind = item.kind ?? "chapter";
@@ -1745,7 +1772,6 @@ export function App(): ReactNode {
       </nav>
       {chapter !== null && <ChapterMetadataPanel key={`${chapter.chapter.id}:${JSON.stringify(chapter.chapter.metadata ?? {})}`} chapter={chapter.chapter} onSave={saveChapterMetadata} />}
       <OutlineNotes notes={notes} activeChapterId={activeChapterId} activeNote={activeNote} draft={noteDraft} saveState={noteSaveState} showAll={showAllNotes} onShowAll={setShowAllNotes} onCreate={createNote} onOpen={openNote} onDraft={updateNoteDraft} onTogglePin={toggleCurrentChapterPin} onSave={saveActiveNote} onArchive={setActiveNoteArchived} />
-      <div className="outline-footer"><code title={project.root}>{project.root}</code><span>{t("Markdown正本")}</span></div>
     </div>;
     if (view === "lens") return <LensPanel
       role={role} setRole={setRole} provider={provider} codexConnected={connections.codex.connected} openAIConnected={connections.openai.connected} onOpenSettings={() => openSettings("ai")}
@@ -1778,8 +1804,9 @@ export function App(): ReactNode {
     if (node.type === "editor") return <section key={node.id} data-editor-pane data-dock-node-id={node.id} data-dock-node-type="editor" className={`dock-editor-node editor-groups split-${editorSession.split}`} aria-label={t("本文エディター")}>{editorSession.groups.map(renderEditorGroup)}{dockPreview(node.id, false)}</section>;
     if (node.type === "tabs") return renderDockTabs(node);
     const visibleChildren = node.children.map((child, index) => ({ child, index })).filter(({ child }) => dockNodeVisible(child));
+    const flexWeights = dockFlexWeights(visibleChildren.map(({ index }) => node.sizes[index] ?? 1));
     return <section key={node.id} data-dock-node-id={node.id} data-dock-node-type="split" className={`dock-split dock-split-${node.direction}`}>
-      {visibleChildren.map(({ child, index }, visibleIndex) => { const next = visibleChildren[visibleIndex + 1]; return <Fragment key={child.id}><div className="dock-split-child" style={{ flex: `${node.sizes[index] ?? 1} 1 0%` }}>{renderDockNode(child)}</div>{next !== undefined && <div className="dock-split-separator" role="separator" tabIndex={0} aria-orientation={node.direction === "horizontal" ? "vertical" : "horizontal"} aria-valuemin={8} aria-valuemax={92} aria-valuenow={Math.round((node.sizes[index] ?? 0) * 100)} aria-label={t("分割位置を変更")} onPointerDown={(event) => beginPaneResize(node.id, index, next.index, event)} onKeyDown={(event) => resizePaneFromKeyboard(node.id, index, next.index, event)} />}</Fragment>; })}
+      {visibleChildren.map(({ child, index }, visibleIndex) => { const next = visibleChildren[visibleIndex + 1]; return <Fragment key={child.id}><div className="dock-split-child" style={{ flex: `${flexWeights[visibleIndex]} 1 0%` }}>{renderDockNode(child)}</div>{next !== undefined && <div className="dock-split-separator" role="separator" tabIndex={0} aria-orientation={node.direction === "horizontal" ? "vertical" : "horizontal"} aria-valuemin={8} aria-valuemax={92} aria-valuenow={Math.round((node.sizes[index] ?? 0) * 100)} aria-label={t("分割位置を変更")} onPointerDown={(event) => beginPaneResize(node.id, index, next.index, event)} onKeyDown={(event) => resizePaneFromKeyboard(node.id, index, next.index, event)} />}</Fragment>; })}
     </section>;
   };
 
@@ -1828,19 +1855,19 @@ export function App(): ReactNode {
     const groupActive = group.id === editorSession.activeGroupId;
     const groupIndex = manifestChapters.findIndex((item) => item.id === groupChapterId);
     const groupStats = groupChapterId === null ? undefined : editorStats[groupChapterId];
-    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onSave={() => void saveAllBuffers()} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
+    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onOpenFind={() => openEditorFind(false)} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onSave={() => void saveAllBuffers()} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
   };
   return <LocaleProvider locale={locale}><div className={shellClass} style={shellStyle}><div className={`app ${layout.zenMode ? "zen-mode" : ""}`}>
     <header className="topbar">
-      <div className="brand"><span className="brand-mark"><AppIcon name="logo" size={22} /></span><div><b>KOHON</b><button className="project-title" onClick={renameProject} title={t("作品名を変更")}>{project.manifest.title}</button></div></div>
-      <button type="button" className="top-command" onClick={() => openQuickAccess("commands")} title={t("コマンド パレットを開く")}><AppIcon name="search" size={15} /><span>{t("操作を検索")}</span><kbd>{t(formatKeybinding(userSettings.keybindings["workbench.commandPalette"]))}</kbd></button>
+      <div className="brand"><button className="brand-home" onClick={() => void returnHome()} disabled={busy} title={t("保存して作品一覧へ")} aria-label={t("保存して作品一覧へ")}><AppIcon name="logo" size={32} /></button><div><b>KOHON</b><button className="project-title" onClick={renameProject} title={t("作品名を変更")}>{project.manifest.title}</button></div></div>
+      <button type="button" className="command-center" onClick={() => openQuickAccess("commands")} title={`${t("操作を検索")} (${t(formatKeybinding(userSettings.keybindings["workbench.commandPalette"]))})`}><AppIcon name="search" size={14} /><span>{locale === "en" ? "Search commands…" : "コマンドをさがす…"}</span><kbd>{t(formatKeybinding(userSettings.keybindings["workbench.commandPalette"]))}</kbd></button>
       <div className="top-actions">
-        <button className="ghost action-with-icon" onClick={createCheckpoint} title={t("現在の状態を保存点にする")}><AppIcon name="checkpoint" />{t("保存点")}</button>
-        <button className="ghost action-with-icon" onClick={exportProject} title={t("Markdownを書き出す")}><AppIcon name="export" />{t("書き出し")}</button>
         <button className={`icon-button top-icon ${layout.zenMode ? "active" : ""}`} onClick={() => commitLayout({ ...layout, zenMode: !layout.zenMode })} aria-label={t("集中モード")} title={t("集中モード")}><AppIcon name="focus" /></button>
         <div className="layout-menu-anchor">
           <button className={`icon-button top-icon ${layoutMenuOpen ? "active" : ""}`} onClick={() => setLayoutMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={layoutMenuOpen} aria-label={t("レイアウトを変更")} title={t("レイアウト")}><AppIcon name="layout" /></button>
           {layoutMenuOpen && <div className="layout-quick-menu" role="menu">
+            <button role="menuitem" onClick={() => { setLayoutMenuOpen(false); void createCheckpoint(); }}><AppIcon name="checkpoint" size={15} /><span>{locale === "en" ? "Save snapshot" : "いまの状態を残す"}</span></button>
+            <button role="menuitem" onClick={() => { setLayoutMenuOpen(false); void exportProject(); }}><AppIcon name="export" size={15} /><span>{locale === "en" ? "Export…" : "エクスポート…"}</span></button>
             <strong>{t("作業レイアウト")}</strong>
             <div className="layout-menu-section"><span>{t("すぐ切り替える")}</span><div className="layout-preset-grid">
               <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "writing"), t("執筆レイアウトへ切り替えました")); setLayoutMenuOpen(false); }}>{t("執筆")}</button>

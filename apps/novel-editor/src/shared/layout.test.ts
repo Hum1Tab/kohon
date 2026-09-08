@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   defaultLayout,
+  activeLayoutPreset,
+  applyLayoutPreset,
+  dockFlexWeights,
   dockView,
   findDockNode,
   findViewNode,
@@ -20,6 +23,25 @@ function flatten(node: DockNode): DockNode[] {
 }
 
 describe("recursive dock layout", () => {
+  it("fills the available space even when hidden siblings leave fractional weights", () => {
+    const factors = dockFlexWeights([.18, .55]);
+    expect(factors.reduce((sum, value) => sum + value, 0)).toBeCloseTo(100);
+    expect(factors[0]! / factors[1]!).toBeCloseTo(.18 / .55);
+    expect(dockFlexWeights([.2])).toEqual([100]);
+    expect(dockFlexWeights([])).toEqual([]);
+  });
+  it("starts with room to write while keeping review tools one click away", () => {
+    const layout = defaultLayout();
+    expect(findViewNode(layout, "outline")?.visible).toBe(true);
+    expect(findViewNode(layout, "lens")?.visible).toBe(false);
+    expect(activeLayoutPreset(layout)).toBe("writing");
+    const review = applyLayoutPreset(layout, "review");
+    expect(findViewNode(review, "lens")?.visible).toBe(true);
+    expect(activeLayoutPreset(review)).toBe("review");
+    expect(activeLayoutPreset(applyLayoutPreset(layout, "compare"))).toBe("compare");
+    expect(activeLayoutPreset(dockView(review, "outline", "editor", "right"))).toBeNull();
+    expect(activeLayoutPreset({ ...review, zenMode: true })).toBeNull();
+  });
   it("keeps one editor and every tool view exactly once", () => {
     const all = flatten(defaultLayout().root);
     expect(all.filter((node) => node.type === "editor")).toHaveLength(1);

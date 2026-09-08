@@ -2,7 +2,6 @@ import { getRole, ROLE_REGISTRY } from "@kohon/editor-core";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type {
-  AppInfo,
   Chapter,
   ChapterMetadata,
   ChapterStatus,
@@ -101,7 +100,7 @@ export function ChapterMetadataPanel({ chapter, onSave }: { chapter: Chapter; on
     finally { setSaving(false); }
   };
   return <details className="chapter-metadata">
-    <summary><span>{t("章・場面情報")}</span><small>{Object.keys(chapter.metadata ?? {}).length === 0 ? t("任意") : t("設定済み")}</small></summary>
+    <summary><span>{t("くわしく")}</span><small>{Object.keys(chapter.metadata ?? {}).length === 0 ? "" : t("設定済み")}</small></summary>
     <div className="chapter-metadata-form">
       <label>{t("要約")}<textarea rows={3} maxLength={2000} value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} placeholder={t("この場面で起きること")} /></label>
       <div className="metadata-row"><label>{t("視点人物")}<input maxLength={200} value={draft.pov} onChange={(event) => patch({ pov: event.target.value })} /></label><label>{t("場所")}<input maxLength={200} value={draft.location} onChange={(event) => patch({ location: event.target.value })} /></label></div>
@@ -136,39 +135,6 @@ export function TextPrompt({ request, onCancel, onSubmit }: { request: TextPromp
   </div>;
 }
 
-export function Welcome({ appInfo, busy, error, colorTheme, onToggleTheme, onCreate, onOpen, onSettings }: { appInfo: AppInfo | null; busy: boolean; error: string | null; colorTheme: "default" | "light" | "dark"; onToggleTheme: () => void; onCreate: () => void; onOpen: () => void; onSettings: () => void }): ReactNode {
-  const { t } = useLocale();
-  return <main className="welcome">
-    <header className="welcome-header">
-      <div className="welcome-brand"><AppIcon name="logo" size={30} tile /><span><b>KOHON</b><small>{t("Writing workspace")}</small></span></div>
-      <div className="welcome-header-actions"><button className="icon-button" onClick={onToggleTheme} title={t("配色を切り替える")} aria-label={t("配色を切り替える")}><AppIcon name={colorTheme === "dark" ? "sun" : "moon"} /></button><button className="icon-button" onClick={onSettings} title={t("設定")} aria-label={t("設定を開く")}><AppIcon name="settings" /></button></div>
-    </header>
-
-    <section className="welcome-hero">
-      <div className="welcome-copy-block">
-        <p className="eyebrow">{t("01 / LOCAL-FIRST WRITING WORKSPACE")}</p>
-        <h1>{t("物語を、")}<br /><span>{t("書く。")}</span></h1>
-        <p className="welcome-copy">{t("余計なものを脇へ置き、本文を真ん中に。Markdownの原稿、章立て、保存点、必要なときだけ呼べる読み手を、ひとつの静かな机にまとめました。")}</p>
-        {error !== null && <p className="welcome-error">{error}</p>}
-        <div className="welcome-actions">
-          <button className="home-action" disabled={busy} onClick={onCreate}><span className="home-action-number">01</span><span className="home-action-icon"><AppIcon name="new" /></span><span><b>{t("新しい作品")}</b><small>{t("空白から物語を始める")}</small></span><span className="action-arrow">↗</span></button>
-          <button className="home-action" disabled={busy} onClick={onOpen}><span className="home-action-number">02</span><span className="home-action-icon"><AppIcon name="open" /></span><span><b>{t("作品を開く")}</b><small>{t("既存のフォルダーを選択")}</small></span><span className="action-arrow">→</span></button>
-          <button className="home-action" onClick={onSettings}><span className="home-action-number">03</span><span className="home-action-icon"><AppIcon name="layout" /></span><span><b>{t("作業環境を整える")}</b><small>{t("テーマとパネル配置を変える")}</small></span><span className="action-arrow">→</span></button>
-        </div>
-      </div>
-
-      <aside className="welcome-art" aria-hidden="true">
-        <span className="welcome-art-index">{t("KOHON / 2026")}</span>
-        <div className="welcome-art-mark"><AppIcon name="logo" size={196} tile /></div>
-        <p>{t("THE MANUSCRIPT")}<br />{t("BELONGS TO THE AUTHOR.")}</p>
-        <span className="welcome-art-side">{t("LOCAL / MARKDOWN / PRIVATE")}</span>
-      </aside>
-    </section>
-
-    <footer className="welcome-footer"><div className="welcome-features"><span><AppIcon name="edit" /> {t("縦書き・横書き")}</span><span><AppIcon name="checkpoint" /> {t("自動保存と保存点")}</span><span><AppIcon name="lens" /> {t("根拠付きAIレンズ")}</span></div><small>KOHON {appInfo?.version ?? ""} · {appInfo?.platform ?? "desktop"}</small></footer>
-  </main>;
-}
-
 const NOTE_KIND_LABELS: Record<NoteKind, string> = { character: "人物", place: "場所", world: "世界観", plot: "プロット", memo: "メモ" };
 
 export function OutlineNotes({ notes, activeChapterId, activeNote, draft, saveState, showAll, onShowAll, onCreate, onOpen, onDraft, onTogglePin, onSave, onArchive }: { notes: NoteMeta[]; activeChapterId: string | null; activeNote: NoteDocument | null; draft: NoteDraft | null; saveState: SaveState; showAll: boolean; onShowAll: (value: boolean) => void; onCreate: () => void; onOpen: (id: string) => void; onDraft: (patch: Partial<Omit<NoteDraft, "id">>) => void; onTogglePin: () => void; onSave: () => Promise<void>; onArchive: (archived: boolean) => void }): ReactNode {
@@ -198,7 +164,7 @@ export function LensPanel(props: LensPanelProps): ReactNode {
   const connectionMissing = (props.provider === "codex" && !props.codexConnected) || (props.provider === "openai" && !props.openAIConnected);
   return <div className="inspector-content lens-panel">
     <div className="section-head"><div><span className="eyebrow">{t("SYNTHETIC READER")}</span><h2>{t("編集レンズ")}</h2></div>{props.thread.length > 0 && <button className="text-button" onClick={props.onClear}>{t("会話を消す")}</button>}</div>
-    <div className="role-grid">{ROLE_IDS.map((id) => <button key={id} className={props.role === id ? "role active" : "role"} title={t(getRole(id).description)} onClick={() => props.setRole(id)}>{t(getRole(id).label)}</button>)}</div>
+    <select className="lens-role-select" aria-label={locale === "en" ? "Reader role" : "読み手をえらぶ"} value={props.role} onChange={(event) => props.setRole(event.target.value as RoleId)}>{ROLE_IDS.map((id) => <option key={id} value={id}>{t(getRole(id).label)}</option>)}</select>
     <p className="role-description">{t(definition.description)}</p>
     <section className="lens-compose" aria-label={t("編集レンズへ質問")}>
     <label>{t("質問")}<textarea rows={3} value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder={t(DEFAULT_QUERY)} /></label>
@@ -219,7 +185,7 @@ export function SearchPanel({ query, setQuery, replacement, setReplacement, case
   return <div className="inspector-content"><span className="eyebrow">{t("FULL TEXT")}</span><h2>{t("作品内検索・置換")}</h2>
     <div className="search-box"><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder={t("語句を入力")} /><button onClick={onSearch}>{t("検索")}</button></div>
     <label className="check search-option"><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} /> {t("大文字と小文字を区別")}</label>
-    <div className="workspace-replace"><label>{t("置換後")}<input value={replacement} onChange={(event) => setReplacement(event.target.value)} placeholder={t("空欄なら削除")} /></label><button className="secondary" disabled={!previewReady || hits.length === 0} onClick={onReplace}>{hits.length === 0 ? t("置換する一致なし") : `${formatNumber(hits.length, locale)}${t("件を置換…")}`}</button><small>{t("表示中の一致だけを対象に確認し、実行前に保存点を作ります。")}</small></div>
+    <details className="replace-disclosure"><summary>{locale === "en" ? "Replace" : "おきかえる"}</summary><div className="workspace-replace"><label>{t("置換後")}<input value={replacement} onChange={(event) => setReplacement(event.target.value)} placeholder={t("空欄なら削除")} /></label><button className="secondary" disabled={!previewReady || hits.length === 0} onClick={onReplace}>{hits.length === 0 ? t("置換する一致なし") : `${formatNumber(hits.length, locale)}${t("件を置換…")}`}</button><small>{t("表示中の一致だけを対象に確認し、実行前に保存点を作ります。")}</small></div></details>
     <p className="result-count">{previewReady ? `${formatNumber(hits.length, locale)}${t("件")}` : t("検索して置換範囲を確認")}</p><div className="search-results">{hits.map((hit, index) => <button key={`${hit.chapterId}-${hit.start}-${index}`} onClick={() => onHit(hit)}><b>{hit.title}</b><p>{hit.excerpt}</p></button>)}</div>
   </div>;
 }

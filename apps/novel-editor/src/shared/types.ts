@@ -185,6 +185,12 @@ export interface UpdateStatus {
   message: string;
 }
 
+export interface RecentProject {
+  root: string;
+  title: string;
+  lastOpenedAt: string;
+}
+
 export interface KohonApi {
   appInfo(): Promise<AppInfo>;
   getUserSettings(): Promise<UserSettings>;
@@ -193,6 +199,8 @@ export interface KohonApi {
   setKeybindingRecording(active: boolean): Promise<void>;
   createProject(title: string): Promise<ProjectSummary | null>;
   openProject(): Promise<ProjectSummary | null>;
+  recentProjects(): Promise<RecentProject[]>;
+  openRecentProject(root: string): Promise<ProjectSummary>;
   refreshProject(root: string): Promise<ProjectSummary>;
   readChapter(root: string, chapterId: string): Promise<ChapterDocument>;
   saveChapter(root: string, chapterId: string, text: string): Promise<ChapterSaveResult>;

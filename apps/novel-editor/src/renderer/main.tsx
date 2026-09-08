@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App.js";
 import "./styles.css";
+import "./workbench-design.css";
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("Application root is missing");

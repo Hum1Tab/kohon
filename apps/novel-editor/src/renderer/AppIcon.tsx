@@ -1,4 +1,4 @@
-import { useId, type ReactNode, type SVGProps } from "react";
+import { type ReactNode, type SVGProps } from "react";
 
 export type IconName =
   | "logo" | "files" | "lens" | "search" | "history" | "settings" | "layout"
@@ -39,17 +39,17 @@ const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
 };
 
 export function AppIcon({ name, size = 20, tile = false, title, className, ...props }: AppIconProps) {
-  const id = useId().replace(/:/gu, "");
+  const logo = name === "logo";
   const label = title ?? (name === "logo" ? "KOHON" : undefined);
   return <svg
     {...props}
-    className={className}
+    className={[logo ? "kohon-logo" : "", tile ? "kohon-logo-tile" : "", className].filter(Boolean).join(" ")}
     width={size}
     height={size}
-    viewBox={tile ? "0 0 64 64" : "0 0 24 24"}
+    viewBox={logo ? "0 0 1024 1024" : "0 0 24 24"}
     fill="none"
     stroke="currentColor"
-    strokeWidth={tile ? 0 : 1.8}
+    strokeWidth={logo ? 0 : 1.8}
     strokeLinecap="round"
     strokeLinejoin="round"
     role={label ? "img" : "presentation"}
@@ -57,21 +57,6 @@ export function AppIcon({ name, size = 20, tile = false, title, className, ...pr
     aria-label={label}
   >
     {label && <title>{label}</title>}
-    {tile ? <>
-      <defs>
-        <linearGradient id={`app-icon-bg-${id}`} x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse"><stop stopColor="#3f7164" /><stop offset="1" stopColor="#203f38" /></linearGradient>
-        <filter id={`app-icon-shadow-${id}`} x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#10231f" floodOpacity=".3" /></filter>
-      </defs>
-      <rect x="4" y="4" width="56" height="56" rx="17" fill={`url(#app-icon-bg-${id})`} filter={`url(#app-icon-shadow-${id})`} />
-      <g filter={`url(#app-icon-shadow-${id})`}>
-        <path d="M14 17c7-2 13-.5 18 4v28c-5-4-11-5.5-18-3.5V17Z" fill="#fffaf0" />
-        <path d="M50 17c-7-2-13-.5-18 4v28c5-4 11-5.5 18-3.5V17Z" fill="#f1e5cf" />
-        <path d="M32 21v28" stroke="#d5c4a7" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M18 25h9M18 30h10M18 35h8" stroke="#8c8172" strokeWidth="1.5" strokeLinecap="round" opacity=".72" />
-      </g>
-      <circle cx="43" cy="31" r="8" fill="#d49a48" stroke="#fff7e7" strokeWidth="2" />
-      <circle cx="43" cy="31" r="4" fill="#315d51" />
-      <path d="m49 37 8 8" stroke="#d49a48" strokeWidth="4" strokeLinecap="round" />
-    </> : name === "logo" ? <><path d="M3 6c4-1.4 7-.5 9 2.2V20c-2.4-2.1-5.4-2.8-9-1.7V6ZM21 6c-4-1.4-7-.5-9 2.2V20c2.4-2.1 5.4-2.8 9-1.7V6Z" /><circle cx="17" cy="11" r="3" /><path d="m19.2 13.2 2.8 2.8" /></> : paths[name]}
+    {logo ? <image href={new URL("../../build/icon.svg", import.meta.url).href} width="1024" height="1024" /> : paths[name]}
   </svg>;
 }

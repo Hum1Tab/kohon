@@ -2,6 +2,19 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.2.4 - 2026-09-09
+
+### Changed
+
+- Refreshed KOHON branding and added a recent-project library with save-before-return navigation.
+- Simplified the writing workbench with a compact icon rail, flat panels, command search, and fewer always-visible controls.
+- Moved infrequent actions into menus, collapsed replacement controls, and reduced duplicate headings and manuscript statistics.
+
+### Fixed
+
+- Corrected dock sizing so visible panels fill the available space after another panel is hidden.
+- Validated recent-project paths before reopening them.
+
 ## 0.2.3 - 2026-09-05
 
 ### Fixed

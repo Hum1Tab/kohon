@@ -53,6 +53,7 @@ export interface EditorPaneProps {
   onReplace: () => void;
   onReplaceAll: () => void;
   onCloseFind: () => void;
+  onOpenFind: () => void;
   onSplit: (direction: "right" | "down") => void;
   onCloseGroup: () => void;
   onMoveChapter: (delta: -1 | 1) => void;
@@ -80,10 +81,6 @@ function closeChapterMenu(event: MouseEvent<HTMLButtonElement>): void {
 export function EditorPane(props: EditorPaneProps): ReactNode {
   const { locale, t } = useLocale();
   const { group, groupActive, groupChapterId, groupIndex, buffer, groupStats, manifestChapters } = props;
-  const currentItem = groupIndex < 0 ? undefined : manifestChapters[groupIndex];
-  const contextLabel = currentItem === undefined
-    ? t("本文")
-    : `${t(currentItem.kind === "scene" ? "場面" : "章")} ${String(groupIndex + 1).padStart(2, "0")} / ${String(manifestChapters.length).padStart(2, "0")} · ${t(props.writingMode === "vertical-rl" ? "縦書き" : "横書き")}`;
   const documentSaveState = buffer?.saveState ?? "saved";
   const documentSaveLabel = t(documentSaveState === "saved" ? "保存済み" : documentSaveState === "saving" ? "保存中…" : documentSaveState === "dirty" ? "未保存" : "保存エラー");
 
@@ -197,14 +194,18 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
     />}
 
     <div className="editor-toolbar">
-      <div><span className="editor-context">{contextLabel}</span><h1>{buffer?.chapter.title ?? t("章を選択")}</h1></div>
       {groupActive && <div className="editor-actions">
-        <button className="icon-button" onClick={() => props.onSplit("right")} title={t("右に分割")} aria-label={t("エディターを右に分割")}><AppIcon name="splitRight" /></button>
-        <button className="icon-button" onClick={() => props.onSplit("down")} title={t("下に分割")} aria-label={t("エディターを下に分割")}><AppIcon name="splitDown" /></button>
         {props.groupCount > 1 && <button className="icon-button" onClick={props.onCloseGroup} title={t("このグループを閉じる")} aria-label={t("現在のエディターグループを閉じる")}><AppIcon name="close" /></button>}
         <details className="editor-more">
-          <summary aria-label={t("章の操作")} title={t("章の操作")}><AppIcon name="more" /></summary>
+          <summary aria-label={t("章の操作")} title={t("章の操作")}><AppIcon name="more" size={18} /></summary>
           <div className="editor-more-menu">
+            <button disabled={buffer === undefined} onClick={(event) => { closeChapterMenu(event); props.onOpenFind(); }}>{t("本文内を検索")}</button>
+            <button onClick={(event) => { closeChapterMenu(event); props.onWritingMode(); }}>{t("横書きと縦書きを切り替える")}</button>
+            <label className="editor-palette-setting">{t("原稿の配色")}<select aria-label={t("原稿の配色")} value={props.theme} onChange={(event) => props.onTheme(event.target.value as ManuscriptTheme)}><option value="paper">{t("白い紙")}</option><option value="sepia">{t("生成り")}</option><option value="gray">{t("グレー")}</option><option value="dark">{t("黒")}</option><option value="custom">{t("カスタム")}</option></select></label>
+            <span className="editor-menu-label">{t("表示")}</span>
+            <button onClick={(event) => { closeChapterMenu(event); props.onSplit("right"); }}>{t("エディターを右に分割")}</button>
+            <button onClick={(event) => { closeChapterMenu(event); props.onSplit("down"); }}>{t("エディターを下に分割")}</button>
+            <span className="editor-menu-label">{t("章・場面")}</span>
             <button disabled={groupIndex <= 0} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(-1); }}>{t("前へ移動")}</button>
             <button disabled={groupIndex < 0 || groupIndex >= manifestChapters.length - 1} onClick={(event) => { closeChapterMenu(event); props.onMoveChapter(1); }}>{t("後ろへ移動")}</button>
             <button onClick={(event) => { closeChapterMenu(event); props.onSplitChapter(); }}>{t("カーソル位置で場面分割")}</button>
@@ -261,14 +262,6 @@ export function EditorPane(props: EditorPaneProps): ReactNode {
       <div className="status-primary">
         <button type="button" className={`document-save-state ${documentSaveState}`} onClick={props.onSave} title={t("今すぐ保存")}><i aria-hidden="true" />{documentSaveLabel}</button>
         <span>{groupStats?.charactersNoWhitespace.toLocaleString(locale) ?? "—"}{t("字")}</span>
-        <span>{groupStats?.lines.toLocaleString(locale) ?? "—"}{t("行")}</span>
-        <span>{groupStats?.words.toLocaleString(locale) ?? "—"}{t("語")}</span>
-      </div>
-      <div className="status-actions">
-        <select aria-label={t("原稿の配色")} value={props.theme} onChange={(event) => props.onTheme(event.target.value as ManuscriptTheme)}>
-          <option value="paper">{t("白い紙")}</option><option value="sepia">{t("生成り")}</option><option value="gray">{t("グレー")}</option><option value="dark">{t("黒")}</option><option value="custom">{t("カスタム")}</option>
-        </select>
-        <button onClick={props.onWritingMode} title={t("横書きと縦書きを切り替える")}>{t(props.writingMode === "vertical-rl" ? "縦書き" : "横書き")}</button>
       </div>
     </footer>
   </main>;

@@ -19,6 +19,7 @@ import { SecureCredentialStore } from "./secure-credentials.js";
 import { installerLaunchArguments, isWindowsPortable, LATEST_RELEASE_PAGE, UpdateManager } from "./updates.js";
 import { migrateLegacyUserData } from "./user-data-migration.js";
 import { UserSettingsStore } from "./user-settings.js";
+import { RecentProjectsStore } from "./recent-projects.js";
 
 // The editor does not use GPU-heavy features. Software rendering avoids startup
 // failures on Windows systems whose graphics runtime is incomplete or blocked.
@@ -29,6 +30,7 @@ let mainWindow: BrowserWindow | null = null;
 let closeApproved = false;
 let closeFallback: ReturnType<typeof setTimeout> | null = null;
 let settingsStore: UserSettingsStore | null = null;
+let recentProjects: RecentProjectsStore | null = null;
 let userSettings = defaultUserSettings();
 let keybindingRecording = false;
 let updateManager: UpdateManager | null = null;
@@ -43,8 +45,8 @@ const EXTERNAL_PAGES = {
 
 function workbenchBackgroundColor(): string {
   const theme = userSettings.appearance.colorTheme;
-  if (theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors)) return "#181818";
-  return theme === "light" ? "#ffffff" : "#eee9df";
+  if (theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors)) return "#141b1b";
+  return "#f0f3ee";
 }
 
 function suggestedFolderName(title: string): string {
@@ -145,9 +147,11 @@ async function chooseNewProject(title: unknown): Promise<ProjectSummary | null> 
   }
   const store = await ProjectStore.create(root, title.trim());
   await store.createChapter(defaultChapterTitle(1, currentLocale()), "");
-  await registerRoot(root);
+  const canonical = await registerRoot(root);
   await store.checkpoint(mainText("最初の保存点"));
-  return summary(store);
+  const project = await summary(new ProjectStore(canonical));
+  await recentProjects?.remember(project.root, project.manifest.title).catch(() => undefined);
+  return project;
 }
 
 async function chooseExistingProject(): Promise<ProjectSummary | null> {
@@ -164,7 +168,9 @@ async function chooseExistingProject(): Promise<ProjectSummary | null> {
   const root = await registerRoot(dirname(selectedPath));
   const store = new ProjectStore(root);
   await store.open();
-  return summary(store);
+  const project = await summary(store);
+  await recentProjects?.remember(project.root, project.manifest.title).catch(() => undefined);
+  return project;
 }
 
 function registerIpc(): void {
@@ -189,6 +195,18 @@ function registerIpc(): void {
   });
   handle("project:create", chooseNewProject);
   handle("project:open", chooseExistingProject);
+  handle("project:recent", () => recentProjects?.list() ?? []);
+  handle("project:open-recent", async (root: unknown) => {
+    if (recentProjects === null || !recentProjects.has(root)) throw new Error(mainText("最近の作品に登録されていません。作品を開くから選択してください。"));
+    const canonical = await realpath(root);
+    if (canonical !== root) throw new Error(mainText("作品の保存先が変わりました。作品を開くから選択してください。"));
+    const store = new ProjectStore(canonical);
+    await store.open();
+    const project = await summary(store);
+    allowedRoots.add(canonical);
+    await recentProjects.remember(project.root, project.manifest.title).catch(() => undefined);
+    return project;
+  });
   handle("project:refresh", async (root) => summary(await storeFor(root)));
   handle("chapter:read", async (root, chapterId): Promise<ChapterDocument> => {
     if (typeof chapterId !== "string") throw new Error("章IDが不正です。");
@@ -300,7 +318,9 @@ function registerIpc(): void {
     if (typeof title !== "string") throw new Error("作品名を確認してください。");
     const store = await storeFor(root);
     await store.renameProject(title);
-    return summary(store);
+    const project = await summary(store);
+    await recentProjects?.remember(project.root, project.manifest.title).catch(() => undefined);
+    return project;
   });
   handle("chapter:delete", async (root, chapterId) => {
     if (typeof chapterId !== "string") throw new Error("章IDが不正です。");
@@ -599,6 +619,7 @@ async function createWindow(): Promise<void> {
     minHeight: 680,
     backgroundColor: workbenchBackgroundColor(),
     title: "KOHON",
+    icon: join(__dirname, "../build/icon.png"),
     show: false,
     webPreferences: {
       preload: join(__dirname, "../dist-preload/index.cjs"),
@@ -633,6 +654,8 @@ else {
     const appData = app.getPath("appData");
     await migrateLegacyUserData(userData, [join(appData, "Novel Lens"), join(appData, "novel-lens")]);
     settingsStore = new UserSettingsStore(join(userData, "settings.json"));
+    recentProjects = new RecentProjectsStore(join(userData, "recent-projects.json"));
+    await recentProjects.load();
     userSettings = await settingsStore.load();
     nativeTheme.on("updated", () => { if (userSettings.appearance.colorTheme === "system") mainWindow?.setBackgroundColor(workbenchBackgroundColor()); });
     updateManager = new UpdateManager(app.getVersion(), process.platform, process.arch, (status) => mainWindow?.webContents.send("updates:status", status), join(app.getPath("temp"), "KOHON-updates"));

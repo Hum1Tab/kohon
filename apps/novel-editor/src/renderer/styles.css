@@ -2,28 +2,28 @@
  * --nl-* is the application chrome. --ms-* is intentionally limited to the manuscript canvas.
  */
 :root {
-  --nl-forest: #315d51;
-  --nl-forest-deep: #203f38;
-  --nl-forest-soft: #e1ece7;
-  --nl-forest-mist: #e7f0eb;
+  --nl-forest: #087578;
+  --nl-forest-deep: #075964;
+  --nl-forest-soft: #d6ede6;
+  --nl-forest-mist: #e8f7f1;
   --nl-gold: #d49a48;
   --nl-gold-light: #d3aa67;
   --nl-gold-deep: #aa7c38;
-  --nl-light-bg: #eee9df;
-  --nl-light-surface: #f7f4ed;
-  --nl-light-raised: #fffdf8;
-  --nl-light-subtle: #e7e1d4;
-  --nl-light-text: #28241e;
-  --nl-light-muted: #746c60;
-  --nl-light-line: #d8d0c3;
-  --nl-dark-bg: #181818;
-  --nl-dark-surface: #1f1f1f;
-  --nl-dark-raised: #252526;
-  --nl-dark-subtle: #2d2d30;
-  --nl-dark-text: #cccccc;
-  --nl-dark-muted: #969696;
-  --nl-dark-line: #3e3e42;
-  --nl-dark-accent: #8bb7a8;
+  --nl-light-bg: #eef7f3;
+  --nl-light-surface: #f5faf7;
+  --nl-light-raised: #fbfefc;
+  --nl-light-subtle: #e2efea;
+  --nl-light-text: #123b3c;
+  --nl-light-muted: #536e6b;
+  --nl-light-line: #cbded7;
+  --nl-dark-bg: #111e20;
+  --nl-dark-surface: #17282a;
+  --nl-dark-raised: #1d3133;
+  --nl-dark-subtle: #253d3f;
+  --nl-dark-text: #d5e7e2;
+  --nl-dark-muted: #99b4ae;
+  --nl-dark-line: #375354;
+  --nl-dark-accent: #65dfbc;
   --nl-paper-bg: #fffefa;
   --nl-paper-text: #25231f;
   --nl-paper-line: #ebe7df;
@@ -76,7 +76,7 @@
   --nl-surface: #ffffff;
   --nl-surface-raised: #ffffff;
   --nl-surface-subtle: #f2f2f2;
-  --nl-text: #1f1f1f;
+  --nl-text: #17282a;
   --nl-muted: #666666;
   --nl-line: #d4d4d4;
   --nl-shadow: color-mix(in srgb, #000 14%, transparent);
@@ -101,7 +101,7 @@
   color-scheme: dark;
 }
 
-/* Accent choices stay inside the icon palette. */
+/* Teal is the brand default; preserve the user's optional gold/ink accents. */
 .app-shell.accent-gold { --nl-accent: var(--nl-gold-deep); --nl-accent-strong: var(--nl-gold-deep); --nl-accent-soft: color-mix(in srgb, var(--nl-gold) 16%, var(--nl-bg)); }
 .app-shell.ui-dark.accent-gold { --nl-accent: var(--nl-gold-light); --nl-accent-strong: var(--nl-gold); --nl-accent-soft: color-mix(in srgb, var(--nl-gold) 18%, var(--nl-bg)); }
 .app-shell.accent-ink { --nl-accent: var(--nl-light-text); --nl-accent-strong: var(--nl-light-text); --nl-accent-soft: var(--nl-light-subtle); }
@@ -119,10 +119,12 @@ body.input-pointer button:focus, body.input-pointer input:focus, body.input-poin
 .app { height: 100%; color: var(--nl-text); background: var(--nl-bg); overflow: hidden; }
 .topbar { height: var(--nl-topbar-height); display: grid; grid-template-columns: minmax(190px, 1fr) minmax(230px, 410px) minmax(260px, 1fr); align-items: center; gap: 14px; padding: 0 14px; background: var(--nl-surface-raised); border-bottom: 1px solid var(--nl-line); -webkit-app-region: drag; }
 .brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.brand-mark, .welcome-mark { display: grid; place-items: center; color: var(--nl-on-accent); background: var(--nl-accent-strong); font-family: Georgia, serif; letter-spacing: -.08em; }
-.brand-mark { width: 32px; height: 32px; border-radius: 9px 9px 9px 3px; font-size: 13px; }
+.kohon-logo { flex: 0 0 auto; overflow: hidden; border-radius: 20%; }
+.kohon-logo-tile { box-shadow: 0 2px 8px var(--nl-shadow); }
+.brand-mark, .welcome-mark { display: grid; place-items: center; background: transparent; overflow: hidden; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; font-size: 13px; }
 .brand div { display: flex; flex-direction: column; }
-.brand b { font-family: Georgia, "Yu Mincho", serif; font-weight: 500; }
+.brand b { font-family: inherit; font-weight: 650; letter-spacing: .06em; }
 .project-title { max-width: 260px; padding: 0; color: var(--nl-muted); background: transparent; border: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; -webkit-app-region: no-drag; }
 .project-title:hover { color: var(--nl-accent); }
 .top-command { min-width: 0; height: 32px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 0 9px; color: var(--nl-muted); background: var(--nl-surface); border: 1px solid var(--nl-line); border-radius: 6px; box-shadow: 0 1px 2px color-mix(in srgb, var(--nl-shadow) 45%, transparent); -webkit-app-region: no-drag; }
@@ -245,7 +247,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 body.is-resizing * { cursor: inherit !important; }
 .pane-heading { min-height: 56px; display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: 9px 10px 7px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.pane-heading h2, .inspector-content h2 { margin: 1px 0 0; font-family: Georgia, "Yu Mincho", serif; font-size: 17px; font-weight: 500; }
+.pane-heading h2, .inspector-content h2 { margin: 1px 0 0; font-family: inherit; font-size: 17px; font-weight: 500; }
 .eyebrow { display: block; color: var(--nl-accent); font-size: 9px; font-weight: 800; letter-spacing: .17em; }
 .icon-button { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0; line-height: 1; }
 .pane-tools { display: flex; gap: 2px; }
@@ -259,7 +261,7 @@ body.is-resizing * { cursor: inherit !important; }
 .chapter.active .chapter-order { color: var(--nl-accent); }
 .chapter-order { color: var(--nl-muted); font-family: ui-monospace, monospace; font-size: 10px; }
 .chapter.scene { padding-left: 15px; }
-.chapter-kind { color: var(--nl-gold); font-size: 8px; font-weight: 700; letter-spacing: .08em; }
+.chapter-kind { color: var(--nl-accent); font-size: 8px; font-weight: 700; letter-spacing: .08em; }
 .chapter.drag-source { opacity: .45; }
 .chapter.drop-before { border-top-color: var(--nl-accent); }
 .chapter.drop-after { border-bottom-color: var(--nl-accent); }
@@ -286,7 +288,7 @@ body.is-resizing * { cursor: inherit !important; }
 .note-editor.archived { opacity: .72; }
 .note-editor-head, .note-meta-row, .note-actions { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 .note-editor-head { color: var(--nl-muted); font-size: 9px; }
-.note-editor-head b { color: var(--nl-gold); }
+.note-editor-head b { color: var(--nl-accent); }
 .note-editor input[type="text"], .note-editor > input, .note-editor select, .note-editor textarea { min-width: 0; width: 100%; color: var(--nl-text); background: var(--nl-surface-raised); border: 1px solid var(--nl-line); border-radius: 5px; }
 .note-editor > input, .note-editor select { height: 28px; padding: 4px 7px; }
 .note-editor textarea { resize: vertical; padding: 7px; font: 11px/1.6 var(--nl-font-ui); }
@@ -339,7 +341,7 @@ body.is-resizing * { cursor: inherit !important; }
 .editor-toolbar { min-height: 56px; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 7px 16px; color: var(--nl-text); background: var(--nl-surface-raised); border-bottom: 1px solid var(--nl-line); }
 .editor-toolbar > div:first-child { min-width: 0; }
 .editor-context { display: block; color: var(--nl-muted); font: 9px ui-monospace, monospace; letter-spacing: .06em; }
-.editor-toolbar h1 { margin: 1px 0 0; overflow: hidden; font-family: "Yu Mincho", Georgia, serif; font-size: 18px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.editor-toolbar h1 { margin: 1px 0 0; overflow: hidden; font-family: inherit; font-size: 18px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .editor-actions { display: flex; gap: 4px; }
 .editor-more { position: relative; }
 .editor-more summary { width: 32px; height: 32px; display: grid; place-items: center; color: var(--nl-muted); background: transparent; border-radius: 7px; cursor: pointer; list-style: none; }
@@ -462,7 +464,7 @@ body.is-resizing * { cursor: inherit !important; }
 .shortcut-card dl { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin: 9px 0 0; font-size: 10px; }
 .shortcut-card dd { margin: 0; color: var(--nl-muted); }
 
-/* Editorial hierarchy from hum1.dev, kept inside the active light/dark chrome. */
+/* KOHON: crisp geometry, teal accents and quiet mint surfaces. */
 .welcome { position: relative; height: 100%; min-height: 0; display: grid; grid-template-rows: 72px minmax(0, 1fr) 56px; padding: 0 clamp(28px, 5vw, 82px); overflow: auto; color: var(--nl-text); background: var(--nl-bg); }
 .welcome::before, .welcome::after { display: none; }
 .welcome-header, .welcome-footer { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-color: var(--nl-line); }
@@ -470,21 +472,21 @@ body.is-resizing * { cursor: inherit !important; }
 .welcome-brand { display: flex; align-items: center; gap: 12px; }
 .welcome-brand > svg { filter: drop-shadow(0 8px 16px color-mix(in srgb, var(--nl-accent) 20%, transparent)); }
 .welcome-brand span { display: grid; }
-.welcome-brand b { font-family: "Yu Mincho", Georgia, serif; font-size: 14px; font-weight: 500; letter-spacing: .02em; }
+.welcome-brand b { font-family: inherit; font-size: 14px; font-weight: 500; letter-spacing: .02em; }
 .welcome-brand small { color: var(--nl-muted); font-size: 8px; letter-spacing: .18em; text-transform: uppercase; }
 .welcome-header-actions { display: flex; gap: 4px; }
 .welcome-header-actions .icon-button { width: 34px; height: 34px; color: var(--nl-muted); background: transparent; border: 0; border-radius: 50%; }
 .welcome-hero { position: relative; z-index: 1; width: min(1120px, 100%); min-height: 0; margin: auto; display: grid; grid-template-columns: minmax(420px, 1.15fr) minmax(280px, .85fr); align-items: center; gap: clamp(44px, 6vw, 88px); padding: clamp(40px, 6vh, 72px) 0; }
 .welcome-copy-block { max-width: 700px; }
-.welcome h1 { margin: 14px 0 22px; font-family: "Yu Mincho", "Hiragino Mincho ProN", Georgia, serif; font-size: clamp(54px, 7vw, 88px); font-weight: 500; line-height: 1; letter-spacing: -.055em; }
+.welcome h1 { margin: 14px 0 22px; font-family: inherit; font-size: clamp(54px, 7vw, 88px); font-weight: 500; line-height: 1; letter-spacing: -.055em; }
 .welcome h1 span { color: var(--nl-accent); }
 .welcome-copy { width: min(590px, 100%); margin: 0; color: var(--nl-muted); font-size: 14px; line-height: 2; }
 .welcome-actions { width: min(620px, 100%); display: grid; margin: 36px 0 0; border-bottom: 1px solid var(--nl-line); }
 .home-action { min-width: 0; display: grid; grid-template-columns: 28px 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 4px; color: var(--nl-text); background: transparent; border: 0; border-top: 1px solid var(--nl-line); border-radius: 0; text-align: left; box-shadow: none; transition: padding 160ms ease, color 160ms ease, background 160ms ease; }
 .home-action:hover { padding-inline: 12px; color: var(--nl-accent); background: color-mix(in srgb, var(--nl-accent) 7%, transparent); }
-.home-action-number { color: var(--nl-gold-deep); font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .08em; }
+.home-action-number { color: var(--nl-accent); font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .08em; }
 .home-action b, .home-action small { display: block; }
-.home-action b { font-family: "Yu Mincho", Georgia, serif; font-size: 15px; font-weight: 500; }
+.home-action b { font-family: inherit; font-size: 15px; font-weight: 500; }
 .home-action small { margin-top: 2px; color: var(--nl-muted); font-size: 9px; letter-spacing: .03em; }
 .home-action-icon { width: 34px; height: 34px; display: grid; place-items: center; color: var(--nl-accent); background: transparent; border: 1px solid var(--nl-line); border-radius: 50%; }
 .home-action:hover .home-action-icon { color: var(--nl-on-accent); background: var(--nl-accent); border-color: var(--nl-accent); }
@@ -493,9 +495,9 @@ body.is-resizing * { cursor: inherit !important; }
 .welcome-art { position: relative; width: min(350px, 31vw); aspect-ratio: .88; justify-self: center; display: grid; place-items: center; color: var(--nl-text); background: var(--nl-surface); border: 1px solid var(--nl-line); border-radius: 18px; box-shadow: 12px 14px 0 color-mix(in srgb, var(--nl-accent) 8%, transparent); overflow: hidden; }
 .welcome-art::before { content: ""; position: absolute; inset: 16px; border: 1px solid color-mix(in srgb, var(--nl-line) 62%, transparent); border-radius: 11px; }
 .welcome-art::after { content: ""; position: absolute; width: 72%; aspect-ratio: 1; background: var(--nl-accent); border-radius: 50%; filter: blur(90px); opacity: .11; }
-.welcome-art-mark { position: relative; z-index: 2; transform: rotate(-2deg); filter: drop-shadow(0 24px 28px var(--nl-shadow)); }
-.welcome-art-index { position: absolute; z-index: 3; top: 31px; left: 33px; color: var(--nl-gold-deep); font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .14em; }
-.welcome-art p { position: absolute; z-index: 3; bottom: 27px; left: 33px; margin: 0; font-family: "Yu Mincho", Georgia, serif; font-size: 12px; line-height: 1.5; letter-spacing: .06em; }
+.welcome-art-mark { position: relative; z-index: 2; transform: none; filter: drop-shadow(0 24px 28px var(--nl-shadow)); }
+.welcome-art-index { position: absolute; z-index: 3; top: 31px; left: 33px; color: var(--nl-accent); font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .14em; }
+.welcome-art p { position: absolute; z-index: 3; bottom: 27px; left: 33px; margin: 0; font-family: inherit; font-size: 12px; line-height: 1.5; letter-spacing: .06em; }
 .welcome-art-side { position: absolute; z-index: 3; right: 28px; bottom: 31px; color: var(--nl-muted); font-size: 8px; letter-spacing: .16em; writing-mode: vertical-rl; }
 .welcome-footer { border-top: 1px solid var(--nl-line); }
 .welcome-features { display: flex; flex-wrap: wrap; gap: 22px; margin: 0; }
@@ -507,7 +509,7 @@ body.is-resizing * { cursor: inherit !important; }
 .settings-header { display: grid; grid-template-columns: 42px minmax(150px, 1fr) minmax(240px, 520px) 42px; align-items: center; gap: 14px; padding: 0 22px; background: var(--nl-surface); border-bottom: 1px solid var(--nl-line); -webkit-app-region: drag; }
 .settings-header button, .settings-header input { -webkit-app-region: no-drag; }
 .settings-header h1, .settings-section > h2, .setting-title h3, .connection-card h3, .update-card strong { color: var(--nl-text); }
-.settings-header h1 { margin: 1px 0 0; font-family: Georgia, "Yu Mincho", serif; font-size: 24px; font-weight: 500; }
+.settings-header h1 { margin: 1px 0 0; font-family: inherit; font-size: 24px; font-weight: 500; }
 .settings-back, .settings-close { width: 36px; height: 36px; padding: 0; color: var(--nl-muted); background: transparent; border: 0; border-radius: 7px; font-size: 24px; }
 .settings-back:hover, .settings-close:hover { color: var(--nl-text); background: var(--nl-surface-subtle); }
 .settings-search { width: 100%; padding: 10px 13px; color: var(--nl-text); background: var(--nl-bg); border: 1px solid var(--nl-line); border-radius: 6px; }
@@ -521,7 +523,7 @@ body.is-resizing * { cursor: inherit !important; }
 .settings-nav p { padding: 12px; color: var(--nl-muted); font-size: 12px; }
 .settings-main { min-width: 0; overflow: auto; padding: 38px clamp(34px, 7vw, 100px) 90px; background: var(--nl-bg); }
 .settings-section { width: min(900px, 100%); }
-.settings-section > h2 { margin: 4px 0 6px; font-family: Georgia, "Yu Mincho", serif; font-size: 30px; font-weight: 500; }
+.settings-section > h2 { margin: 4px 0 6px; font-family: inherit; font-size: 30px; font-weight: 500; }
 .settings-lead { margin: 0 0 27px; color: var(--nl-muted); font-size: 13px; }
 .settings-rows { border-top: 1px solid var(--nl-line); }
 .setting-row { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(220px, 340px); align-items: center; gap: 35px; min-height: 92px; padding: 18px 2px; border-bottom: 1px solid var(--nl-line); }
@@ -587,7 +589,7 @@ body.is-resizing * { cursor: inherit !important; }
 .quick-access-results button b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
 .quick-access-results button small { color: var(--nl-muted); font-size: 10px; }
 .prompt-dialog { width: min(460px, 100%); padding: 26px; color: var(--nl-text); background: var(--nl-surface-raised); border: 1px solid var(--nl-line); border-radius: 14px; box-shadow: 0 24px 80px var(--nl-shadow); }
-.prompt-dialog h2 { margin: 4px 0 18px; font-family: Georgia, "Yu Mincho", serif; font-size: 24px; font-weight: 500; }
+.prompt-dialog h2 { margin: 4px 0 18px; font-family: inherit; font-size: 24px; font-weight: 500; }
 .prompt-dialog label { display: block; color: var(--nl-muted); font-size: 12px; font-weight: 700; }
 .prompt-dialog input { width: 100%; margin-top: 6px; padding: 10px 11px; color: var(--nl-text); background: var(--nl-bg); border: 1px solid var(--nl-line); border-radius: 7px; }
 .prompt-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
