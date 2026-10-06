@@ -44,7 +44,7 @@ export function StoryMap({ chapters, lengths, reviews, activeChapterId, onChapte
   useEffect(() => {
     const container = viewport.current;
     if (!container || !activeChapterId) return;
-    const chapterButton = [...container.querySelectorAll<HTMLButtonElement>("[data-story-chapter]")].find((button) => button.dataset.storyChapter === activeChapterId);
+    const chapterButton = [...container.querySelectorAll<HTMLButtonElement>("[data-story-chapter]")].find((button) => button.dataset["storyChapter"] === activeChapterId);
     if (!chapterButton) return;
     const left = chapterButton.offsetLeft, right = left + chapterButton.offsetWidth;
     const sticky = LABEL_WIDTH;
