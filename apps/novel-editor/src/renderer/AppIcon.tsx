@@ -1,7 +1,7 @@
 import { type ReactNode, type SVGProps } from "react";
 
 export type IconName =
-  | "logo" | "files" | "lens" | "search" | "history" | "settings" | "layout"
+  | "logo" | "files" | "lens" | "search" | "history" | "map" | "settings" | "layout"
   | "sun" | "moon" | "new" | "open" | "checkpoint" | "export" | "add"
   | "import" | "focus" | "panel" | "edit" | "close" | "check"
   | "splitRight" | "splitDown" | "more";
@@ -18,6 +18,7 @@ const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
   lens: <><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7Z" /><path d="m18.5 15 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7Z" /></>,
   search: <><circle cx="10.8" cy="10.8" r="6.2" /><path d="m16 16 4.5 4.5" /></>,
   history: <><path d="M4 11a8 8 0 1 0 2.4-5.7" /><path d="M4 5v6h6M12 7v5l3.5 2" /></>,
+  map: <><path d="M3 19h18M4 15l4-5 4 3 4-8 4 6" /><path d="M4 5v14" /></>,
   settings: <><path d="m12 3 1.2 2.1 2.3.5 2-1.1 1.9 1.9-1.1 2 .5 2.3L21 12l-2.1 1.2-.5 2.3 1.1 2-1.9 1.9-2-1.1-2.3.5L12 21l-1.2-2.1-2.3-.5-2 1.1-1.9-1.9 1.1-2L5.2 13 3 12l2.2-1.1.5-2.3-1.1-2 1.9-1.9 2 1.1 2.3-.5Z" /><circle cx="12" cy="12" r="3" /></>,
   layout: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 4v16M9 11h11" /></>,
   sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,

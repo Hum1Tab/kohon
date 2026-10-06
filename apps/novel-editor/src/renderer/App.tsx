@@ -63,6 +63,7 @@ import { AppIcon } from "./AppIcon.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 import { EditorPane } from "./EditorPane.js";
 import { ProjectHome } from "./ProjectHome.js";
+import { StoryMap } from "./StoryMap.js";
 import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
 import { LocaleProvider } from "./LocaleContext.js";
 
@@ -89,7 +90,8 @@ const VIEW_LABELS: Record<ViewId, string> = {
   outline: "ファイル",
   lens: "レンズ",
   search: "検索",
-  history: "履歴"
+  history: "履歴",
+  map: "物語マップ"
 };
 
 function dockNodeVisible(node: DockNode): boolean {
@@ -138,6 +140,7 @@ export function App(): ReactNode {
   const [editorSession, setEditorSession] = useState<EditorSessionState>(() => defaultEditorSession());
   const [editorBuffers, setEditorBuffers] = useState<EditorBuffersState>(() => createEditorBuffers());
   const [editorStats, setEditorStats] = useState<Record<string, TextStats>>({});
+  const [storyLengths, setStoryLengths] = useState<Record<string, number>>({});
   const [isComposing, setIsComposing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -311,6 +314,7 @@ export function App(): ReactNode {
   }, [connections.codex.models, modelId, provider]);
 
   const manifestChapters = useMemo(() => [...(project?.manifest.chapters ?? [])].sort((a, b) => a.order - b.order), [project]);
+  const storyChapterKeys = manifestChapters.map((item) => item.id).sort().join("|");
   const activeEditorGroup = editorSession.groups.find((group) => group.id === editorSession.activeGroupId) ?? editorSession.groups[0];
   const activeChapterId = activeEditorGroup?.activeChapterId ?? null;
   const activeBuffer = activeChapterId === null ? undefined : editorBuffers.buffers[activeChapterId];
@@ -365,6 +369,25 @@ export function App(): ReactNode {
   useEffect(() => { setScopeApproved(false); }, [role, activeChapterId, project?.root]);
 
   useEffect(() => { setFindMatchIndex((current) => findMatches.length === 0 ? -1 : Math.min(current, findMatches.length - 1)); }, [findMatches.length]);
+
+  // Read manuscripts only when opening a project / adding or removing chapters.
+  // Saving one chapter updates its cached count below; keystrokes never rescan the project.
+  useEffect(() => {
+    if (project === null) return;
+    const root = project.root;
+    const chapters = [...project.manifest.chapters];
+    let cancelled = false;
+    void (async () => {
+      for (const item of chapters) {
+        if (cancelled) break;
+        try {
+          const document = await window.kohon.readChapter(root, item.id);
+          if (!cancelled) setStoryLengths((current) => current[item.id] === undefined ? { ...current, [item.id]: [...document.text].length } : current);
+        } catch { /* Missing manuscript: leave it as a blank strip. */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [project?.root, storyChapterKeys]);
 
   useEffect(() => { textRef.current = text; }, [text]);
   useEffect(() => { editorBuffersRef.current = editorBuffers; }, [editorBuffers]);
@@ -437,6 +460,7 @@ export function App(): ReactNode {
     const operation = saveQueueRef.current.catch(() => undefined).then(async () => {
       try {
         const result = await window.kohon.saveChapter(snapshot.root, snapshot.chapterId, snapshot.text);
+        setStoryLengths((current) => ({ ...current, [snapshot.chapterId]: [...snapshot.text].length }));
         const latest = editorBuffersRef.current.buffers[chapterId];
         setEditorBuffers((current) => saveSucceeded(current, chapterId, { text: snapshot.text, version: result.version }));
         if (latest === undefined || latest.text === snapshot.text) {
@@ -685,6 +709,7 @@ export function App(): ReactNode {
     try { restoredNotes = await window.kohon.listNotes(next.root); }
     catch (cause) { reviewWarning = `${reviewWarning === null ? "" : `${reviewWarning} `}${t("作業メモを読み込めませんでした。本文はそのまま編集できます。")} ${errorText(cause)}`; }
     sessionHydratedRootRef.current = next.root;
+    setStoryLengths({});
     setProject(next);
     setEditorSession(restoredSession);
     setEditorBuffers(createEditorBuffers());
@@ -1752,6 +1777,12 @@ export function App(): ReactNode {
   const selectViewInTabs = (nodeId: string, view: ViewId): void => commitLayout(setTabsActive(layout, nodeId, view));
 
   const renderView = (view: ViewId): ReactNode => {
+    if (view === "map") return <StoryMap
+      chapters={manifestChapters} lengths={storyLengths} reviews={reviewFindings}
+      activeChapterId={activeChapterId} disabled={busy}
+      onChapter={(id) => { void loadChapter(id); }}
+      onReorder={(ids) => { if (project === null) return; void window.kohon.reorderChapters(project.root, ids).then(setProject).catch((cause) => setError(errorText(cause))); }}
+    />;
     if (view === "outline") return <div className="outline-content">
       <div className="pane-heading"><div
         className="pane-title-drag dock-handle"

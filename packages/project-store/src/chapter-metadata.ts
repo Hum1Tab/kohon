@@ -1,5 +1,20 @@
 export type ChapterStatus = "idea" | "draft" | "revising" | "done";
 
+export interface CharacterMoment {
+  character: string;
+  action?: string;
+  emotion?: number; // author-entered -5..5, undefined means unknown
+  expression?: string;
+  innerThought?: string; // may be off-page/private
+  offstage?: boolean;
+}
+export interface RelationshipMoment {
+  from: string;
+  to: string;
+  label?: string;
+  strength?: number; // author-entered -5..5
+}
+
 /** Optional planning data. The manuscript body remains in its Markdown file. */
 export interface ChapterMetadata {
   summary?: string;
@@ -9,6 +24,8 @@ export interface ChapterMetadata {
   timeline?: string;
   status?: ChapterStatus;
   tags?: string[];
+  moments?: CharacterMoment[];
+  relationships?: RelationshipMoment[];
 }
 
 const MAX_SUMMARY_LENGTH = 2_000;
@@ -48,6 +65,43 @@ function optionalStatus(value: unknown): ChapterStatus | undefined {
   return value;
 }
 
+/** Bound untrusted optional story data without inferring anything from manuscript text. */
+function optionalMoments(value: unknown): CharacterMoment[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 100) throw new Error("invalid chapter metadata: moments");
+  const result: CharacterMoment[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) throw new Error("invalid chapter metadata: moments");
+    const character = optionalText(entry["character"], "character", MAX_LIST_ITEM_LENGTH);
+    if (character === undefined) throw new Error("invalid chapter metadata: character");
+    const action = optionalText(entry["action"], "action", 500);
+    const expression = optionalText(entry["expression"], "expression", MAX_LABEL_LENGTH);
+    const innerThought = optionalText(entry["innerThought"], "innerThought", 500);
+    const emotion = entry["emotion"];
+    if (emotion !== undefined && (!Number.isInteger(emotion) || (emotion as number) < -5 || (emotion as number) > 5)) throw new Error("invalid chapter metadata: emotion");
+    const offstage = entry["offstage"];
+    if (offstage !== undefined && typeof offstage !== "boolean") throw new Error("invalid chapter metadata: offstage");
+    result.push({ character, ...(action ? { action } : {}), ...(emotion === undefined ? {} : { emotion: emotion as number }), ...(expression ? { expression } : {}), ...(innerThought ? { innerThought } : {}), ...(offstage === true ? { offstage: true } : {}) });
+  }
+  return result.length ? result : undefined;
+}
+function optionalRelationships(value: unknown): RelationshipMoment[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 100) throw new Error("invalid chapter metadata: relationships");
+  const result: RelationshipMoment[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) throw new Error("invalid chapter metadata: relationships");
+    const from = optionalText(entry["from"], "from", MAX_LIST_ITEM_LENGTH);
+    const to = optionalText(entry["to"], "to", MAX_LIST_ITEM_LENGTH);
+    if (!from || !to || from === to) throw new Error("invalid chapter metadata: relationship people");
+    const label = optionalText(entry["label"], "label", MAX_LABEL_LENGTH);
+    const strength = entry["strength"];
+    if (strength !== undefined && (!Number.isInteger(strength) || (strength as number) < -5 || (strength as number) > 5)) throw new Error("invalid chapter metadata: relationship strength");
+    result.push({ from, to, ...(label ? { label } : {}), ...(strength === undefined ? {} : { strength: strength as number }) });
+  }
+  return result.length ? result : undefined;
+}
+
 /** Validate unknown JSON input and omit empty optional values. */
 export function validateChapterMetadata(value: unknown): ChapterMetadata {
   if (!isRecord(value)) throw new Error("invalid chapter metadata");
@@ -58,6 +112,8 @@ export function validateChapterMetadata(value: unknown): ChapterMetadata {
   const timeline = optionalText(value["timeline"], "timeline", MAX_LABEL_LENGTH);
   const status = optionalStatus(value["status"]);
   const tags = optionalList(value["tags"], "tags");
+  const moments = optionalMoments(value["moments"]);
+  const relationships = optionalRelationships(value["relationships"]);
   return {
     ...(summary === undefined ? {} : { summary }),
     ...(pov === undefined ? {} : { pov }),
@@ -65,7 +121,9 @@ export function validateChapterMetadata(value: unknown): ChapterMetadata {
     ...(location === undefined ? {} : { location }),
     ...(timeline === undefined ? {} : { timeline }),
     ...(status === undefined ? {} : { status }),
-    ...(tags === undefined ? {} : { tags })
+    ...(tags === undefined ? {} : { tags }),
+    ...(moments === undefined ? {} : { moments }),
+    ...(relationships === undefined ? {} : { relationships })
   };
 }
 
@@ -90,7 +148,9 @@ export function mergeChapterMetadata(target: ChapterMetadata | undefined, source
     location: mergeScalar("location", left.location, right.location),
     timeline: mergeScalar("timeline", left.timeline, right.timeline),
     status: mergeScalar("status", left.status, right.status),
-    tags: [...new Set([...(left.tags ?? []), ...(right.tags ?? [])])]
+    tags: [...new Set([...(left.tags ?? []), ...(right.tags ?? [])])],
+    moments: [...(left.moments ?? []), ...(right.moments ?? [])],
+    relationships: [...(left.relationships ?? []), ...(right.relationships ?? [])]
   });
   return isEmptyChapterMetadata(merged) ? undefined : merged;
 }

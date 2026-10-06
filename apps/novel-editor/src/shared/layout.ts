@@ -1,5 +1,5 @@
 /** A persisted, recursive workbench layout. Tool views live in tab groups around one editor. */
-export type ViewId = "outline" | "lens" | "search" | "history";
+export type ViewId = "outline" | "lens" | "search" | "history" | "map";
 export type SlotId = "primary" | "secondary" | "bottom";
 export type PhysicalSide = "left" | "right";
 export type BottomPanelAlignment = "editor" | "justify";
@@ -26,7 +26,7 @@ export interface LayoutPreferences {
 
 export type LayoutPatch = Partial<Omit<LayoutPreferences, "root">> & { root?: DockNode };
 
-export const VIEW_IDS: readonly ViewId[] = ["outline", "lens", "search", "history"];
+export const VIEW_IDS: readonly ViewId[] = ["outline", "lens", "search", "history", "map"];
 export const TOOL_VIEWS: readonly ViewId[] = ["lens", "search", "history"];
 export const LAYOUT_LIMITS = {
   primary: { min: 180, max: 420, def: 252 },
@@ -70,7 +70,7 @@ function split(id: string, direction: DockSplitNode["direction"], children: Dock
 
 export function defaultLayout(): LayoutPreferences {
   return {
-    root: split("root", "horizontal", [tabs("primary", ["outline"]), editor(), tabs("secondary", [...TOOL_VIEWS], false)], [252, 760, 380]),
+    root: split("root-vertical", "vertical", [split("root", "horizontal", [tabs("primary", ["outline"]), editor(), tabs("secondary", [...TOOL_VIEWS], false)], [252, 760, 380]), tabs("bottom", ["map"], false)], [760, LAYOUT_LIMITS.bottom.def]),
     activityBar: "left", activityBarVisible: true, zenMode: false,
     primarySide: "left", secondarySameSide: false,
     bottomPanelAlignment: "editor", bottomPanelMaximized: false
@@ -131,14 +131,33 @@ function uniqueNodeId(root: DockNode, prefix: string): string {
   return `${prefix}-${suffix}`;
 }
 
+/** Keep all existing tab placements/sizes; add an absent map to the bottom only. */
+function addMapAtBottom(root: DockNode): DockNode {
+  const append = (node: DockNode): DockNode | null => {
+    if (node.type !== "split") return null;
+    // A vertical split's last tab group is an existing bottom dock.
+    if (node.direction === "vertical" && node.children.length > 1) {
+      const last = node.children[node.children.length - 1]!;
+      if (last.type === "tabs") return split(node.id, node.direction, [...node.children.slice(0, -1), tabs(last.id, [...last.views, "map"], last.visible, last.activeView)], node.sizes);
+    }
+    for (let index = 0; index < node.children.length; index += 1) {
+      const changed = append(node.children[index]!);
+      if (changed !== null) return split(node.id, node.direction, node.children.map((child, i) => i === index ? changed : child), node.sizes);
+    }
+    return null;
+  };
+  return append(root) ?? split(uniqueNodeId(root, "map-vertical"), "vertical", [root, tabs(uniqueNodeId(root, "map-bottom"), ["map"], false)], [760, LAYOUT_LIMITS.bottom.def]);
+}
+
 function completeTree(rawRoot: unknown): DockNode {
   const seenViews = new Set<ViewId>();
   const editorState = { found: false };
   let root = cleanNode(rawRoot, seenViews, new Set<string>(), editorState);
   if (root === null) root = editor();
   if (!editorState.found) root = split(uniqueNodeId(root, "root"), "horizontal", [root, editor()], [1, 2]);
-  const missing = VIEW_IDS.filter((view) => !seenViews.has(view));
+  const missing = VIEW_IDS.filter((view) => view !== "map" && !seenViews.has(view));
   if (missing.length > 0) root = split(uniqueNodeId(root, "recovered"), "horizontal", [root, tabs(uniqueNodeId(root, "recovered-tabs"), missing, false)], [3, 1]);
+  if (!seenViews.has("map")) root = addMapAtBottom(root);
   return root;
 }
 
@@ -312,10 +331,12 @@ export function applyLayoutPreset(layout: LayoutPreferences, preset: LayoutPrese
   } else if (preset === "review") {
     const secondary = findViewNode(next, "lens");
     if (secondary !== null) next.root = setTabsVisibility(next, secondary.id, true).root;
+    const bottom = findViewNode(next, "map");
+    if (bottom !== null) next.root = setTabsVisibility(next, bottom.id, true).root;
   } else if (preset === "compare") {
     next.root = split("root-vertical", "vertical", [
       split("root", "horizontal", [tabs("primary", ["outline"], false), editor(), tabs("secondary", ["lens", "search"], true, "search")], [252, 760, 380]),
-      tabs("bottom", ["history"])
+      tabs("bottom", ["history", "map"], true, "history")
     ], [3, 1]);
   }
   return sanitizeLayout(next as unknown as Record<string, unknown>);
