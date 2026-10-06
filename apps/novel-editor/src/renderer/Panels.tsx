@@ -25,7 +25,10 @@ import { useModalFocus } from "./useModalFocus.js";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 export type NoteDraft = { id: string; title: string; kind: NoteKind; chapterIds: string[]; text: string };
-type ChapterMetadataDraft = { summary: string; pov: string; characters: string; location: string; timeline: string; status: "" | ChapterStatus; tags: string };
+type ChapterMetadataDraft = { summary: string; pov: string; characters: string; location: string; timeline: string; status: "" | ChapterStatus; tags: string;
+  moments: Array<{ character: string; action: string; emotion: string; expression: string; innerThought: string; offstage: boolean }>;
+  relationships: Array<{ from: string; to: string; label: string; strength: string }>;
+};
 
 export interface TextPromptRequest {
   id: number;
@@ -57,7 +60,9 @@ function metadataDraft(metadata: ChapterMetadata | undefined): ChapterMetadataDr
     location: metadata?.location ?? "",
     timeline: metadata?.timeline ?? "",
     status: metadata?.status ?? "",
-    tags: metadata?.tags?.join("、") ?? ""
+    tags: metadata?.tags?.join("、") ?? "",
+    moments: (metadata?.moments ?? []).map((m) => ({ character: m.character, action: m.action ?? "", emotion: m.emotion === undefined ? "" : String(m.emotion), expression: m.expression ?? "", innerThought: m.innerThought ?? "", offstage: m.offstage === true })),
+    relationships: (metadata?.relationships ?? []).map((r) => ({ from: r.from, to: r.to, label: r.label ?? "", strength: r.strength === undefined ? "" : String(r.strength) }))
   };
 }
 
@@ -81,7 +86,9 @@ function metadataValue(draft: ChapterMetadataDraft): ChapterMetadata {
     ...(location === undefined ? {} : { location }),
     ...(timeline === undefined ? {} : { timeline }),
     ...(draft.status === "" ? {} : { status: draft.status }),
-    ...(tags === undefined ? {} : { tags })
+    ...(tags === undefined ? {} : { tags }),
+    ...(draft.moments.length === 0 ? {} : { moments: draft.moments.filter((m) => m.character.trim()).map((m) => ({ character: m.character.trim(), ...(optional(m.action) ? { action: optional(m.action) } : {}), ...(m.emotion !== "" ? { emotion: Number(m.emotion) } : {}), ...(optional(m.expression) ? { expression: optional(m.expression) } : {}), ...(optional(m.innerThought) ? { innerThought: optional(m.innerThought) } : {}), ...(m.offstage ? { offstage: true } : {}) })) }),
+    ...(draft.relationships.length === 0 ? {} : { relationships: draft.relationships.filter((r) => r.from.trim() || r.to.trim()).map((r) => ({ from: r.from.trim(), to: r.to.trim(), ...(optional(r.label) ? { label: optional(r.label) } : {}), ...(r.strength !== "" ? { strength: Number(r.strength) } : {}) })) })
   };
 }
 
@@ -93,6 +100,10 @@ export function ChapterMetadataPanel({ chapter, onSave }: { chapter: Chapter; on
   const value = metadataValue(draft);
   const dirty = JSON.stringify(value) !== JSON.stringify(chapter.metadata ?? {});
   const patch = (next: Partial<ChapterMetadataDraft>): void => { setDraft((current) => ({ ...current, ...next })); setFailed(false); };
+  const updateMoment = (index: number, value: Partial<ChapterMetadataDraft["moments"][number]>): void =>
+    patch({ moments: draft.moments.map((moment, row) => row === index ? { ...moment, ...value } : moment) });
+  const updateRelationship = (index: number, value: Partial<ChapterMetadataDraft["relationships"][number]>): void =>
+    patch({ relationships: draft.relationships.map((bond, row) => row === index ? { ...bond, ...value } : bond) });
   const save = async (): Promise<void> => {
     setSaving(true); setFailed(false);
     try { await onSave(value); }
@@ -107,6 +118,32 @@ export function ChapterMetadataPanel({ chapter, onSave }: { chapter: Chapter; on
       <div className="metadata-row"><label>{t("時系列")}<input maxLength={200} value={draft.timeline} onChange={(event) => patch({ timeline: event.target.value })} placeholder={t("一日目・夕方")} /></label><label>{t("状態")}<select value={draft.status} onChange={(event) => patch({ status: event.target.value as ChapterMetadataDraft["status"] })}><option value="">{t("未設定")}</option><option value="idea">{t("構想")}</option><option value="draft">{t("下書き")}</option><option value="revising">{t("推敲中")}</option><option value="done">{t("完了")}</option></select></label></div>
       <label>{t("登場人物")}<input maxLength={1000} value={draft.characters} onChange={(event) => patch({ characters: event.target.value })} placeholder={t("読点で区切る")} /></label>
       <label>{t("タグ")}<input maxLength={1000} value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} placeholder={t("伏線、回想")} /></label>
+      <details className="story-annotations">
+        <summary>{t("人物の行動・感情")}</summary>
+        <p>{t("各章の状態を明示的に記録します。空欄は不明のまま表示します。")}</p>
+        {draft.moments.map((moment, index) => <div key={index} className="story-annotation-row">
+          <label>{t("人物名")}<input maxLength={100} value={moment.character} onChange={(e) => updateMoment(index, { character: e.target.value })}/></label>
+          <label>{t("行動")}<input maxLength={500} value={moment.action} onChange={(e) => updateMoment(index, { action: e.target.value })}/></label>
+          <label>{t("感情の高低")}<select value={moment.emotion} onChange={(e) => updateMoment(index, { emotion: e.target.value })}><option value="">{t("未設定")}</option>{Array.from({ length: 11 }, (_, i) => i - 5).map((v) => <option key={v} value={v}>{v > 0 ? "+" : ""}{v}</option>)}</select></label>
+          <label>{t("表に出る表情")}<input maxLength={200} value={moment.expression} onChange={(e) => updateMoment(index, { expression: e.target.value })}/></label>
+          <label>{t("表に出ない気持ち")}<input maxLength={500} value={moment.innerThought} onChange={(e) => updateMoment(index, { innerThought: e.target.value })}/></label>
+          <label className="story-checkbox"><input type="checkbox" checked={moment.offstage} onChange={(e) => updateMoment(index, { offstage: e.target.checked })}/>{t("場面外")}</label>
+          <button type="button" className="text-button" onClick={() => patch({ moments: draft.moments.filter((_, i) => i !== index) })}>{t("削除")}</button>
+        </div>)}
+        <button type="button" className="text-button" onClick={() => patch({ moments: [...draft.moments, { character: "", action: "", emotion: "", expression: "", innerThought: "", offstage: false }] })}>{t("人物の状態を追加")}</button>
+      </details>
+      <details className="story-annotations">
+        <summary>{t("人物の関係")}</summary>
+        <p>{t("関係に変化があった章で記録すると、以降の章に引き継がれます。")}</p>
+        {draft.relationships.map((bond, index) => <div key={index} className="story-annotation-row">
+          <label>{t("人物A")}<input maxLength={100} value={bond.from} onChange={(e) => updateRelationship(index, { from: e.target.value })}/></label>
+          <label>{t("人物B")}<input maxLength={100} value={bond.to} onChange={(e) => updateRelationship(index, { to: e.target.value })}/></label>
+          <label>{t("関係の説明")}<input maxLength={200} value={bond.label} onChange={(e) => updateRelationship(index, { label: e.target.value })}/></label>
+          <label>{t("関係の強さ")}<select value={bond.strength} onChange={(e) => updateRelationship(index, { strength: e.target.value })}><option value="">{t("未設定")}</option>{Array.from({ length: 11 }, (_, i) => i - 5).map((v) => <option key={v} value={v}>{v > 0 ? "+" : ""}{v}</option>)}</select></label>
+          <button type="button" className="text-button" onClick={() => patch({ relationships: draft.relationships.filter((_, i) => i !== index) })}>{t("削除")}</button>
+        </div>)}
+        <button type="button" className="text-button" onClick={() => patch({ relationships: [...draft.relationships, { from: "", to: "", label: "", strength: "" }] })}>{t("関係を追加")}</button>
+      </details>
       <div className="metadata-actions"><small>{failed ? t("保存できませんでした") : dirty ? t("未保存") : t("保存済み")}</small><button className="text-button" disabled={!dirty || saving} onClick={() => { void save(); }}>{saving ? t("保存中…") : t("保存")}</button></div>
     </div>
   </details>;
