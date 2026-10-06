@@ -87,8 +87,8 @@ function metadataValue(draft: ChapterMetadataDraft): ChapterMetadata {
     ...(timeline === undefined ? {} : { timeline }),
     ...(draft.status === "" ? {} : { status: draft.status }),
     ...(tags === undefined ? {} : { tags }),
-    ...(draft.moments.length === 0 ? {} : { moments: draft.moments.filter((m) => m.character.trim()).map((m) => ({ character: m.character.trim(), ...(optional(m.action) ? { action: optional(m.action) } : {}), ...(m.emotion !== "" ? { emotion: Number(m.emotion) } : {}), ...(optional(m.expression) ? { expression: optional(m.expression) } : {}), ...(optional(m.innerThought) ? { innerThought: optional(m.innerThought) } : {}), ...(m.offstage ? { offstage: true } : {}) })) }),
-    ...(draft.relationships.length === 0 ? {} : { relationships: draft.relationships.filter((r) => r.from.trim() || r.to.trim()).map((r) => ({ from: r.from.trim(), to: r.to.trim(), ...(optional(r.label) ? { label: optional(r.label) } : {}), ...(r.strength !== "" ? { strength: Number(r.strength) } : {}) })) })
+    ...(draft.moments.length === 0 ? {} : { moments: draft.moments.filter((m) => m.character.trim()).map((m) => ({ character: m.character.trim(), ...(m.action.trim() ? { action: m.action.trim() } : {}), ...(m.emotion !== "" ? { emotion: Number(m.emotion) } : {}), ...(m.expression.trim() ? { expression: m.expression.trim() } : {}), ...(m.innerThought.trim() ? { innerThought: m.innerThought.trim() } : {}), ...(m.offstage ? { offstage: true } : {}) })) }),
+    ...(draft.relationships.length === 0 ? {} : { relationships: draft.relationships.filter((r) => r.from.trim() || r.to.trim()).map((r) => ({ from: r.from.trim(), to: r.to.trim(), ...(r.label.trim() ? { label: r.label.trim() } : {}), ...(r.strength !== "" ? { strength: Number(r.strength) } : {}) })) })
   };
 }
 
