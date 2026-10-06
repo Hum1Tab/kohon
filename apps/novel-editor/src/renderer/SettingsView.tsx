@@ -78,7 +78,7 @@ function settingMatches(query: string, locale: "ja" | "en", ...terms: string[]):
   return words.length === 0 || words.every((word) => haystack.includes(word));
 }
 
-const VIEW_LABELS: Record<ViewId, string> = { outline: "章アウトライン", lens: "編集レンズ", search: "作品内検索", history: "履歴" };
+const VIEW_LABELS: Record<ViewId, string> = { outline: "章アウトライン", lens: "編集レンズ", search: "作品内検索", history: "履歴", map: "物語マップ" };
 
 function tabGroups(node: DockNode): DockTabsNode[] {
   if (node.type === "tabs") return [node];
