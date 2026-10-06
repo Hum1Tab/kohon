@@ -34,9 +34,11 @@ describe("recursive dock layout", () => {
     const layout = defaultLayout();
     expect(findViewNode(layout, "outline")?.visible).toBe(true);
     expect(findViewNode(layout, "lens")?.visible).toBe(false);
+    expect(findViewNode(layout, "map")?.visible).toBe(false);
     expect(activeLayoutPreset(layout)).toBe("writing");
     const review = applyLayoutPreset(layout, "review");
     expect(findViewNode(review, "lens")?.visible).toBe(true);
+    expect(findViewNode(review, "map")?.visible).toBe(true);
     expect(activeLayoutPreset(review)).toBe("review");
     expect(activeLayoutPreset(applyLayoutPreset(layout, "compare"))).toBe("compare");
     expect(activeLayoutPreset(dockView(review, "outline", "editor", "right"))).toBeNull();
@@ -45,7 +47,7 @@ describe("recursive dock layout", () => {
   it("keeps one editor and every tool view exactly once", () => {
     const all = flatten(defaultLayout().root);
     expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
-    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "outline", "search"]);
+    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "map", "outline", "search"]);
   });
 
   it("repairs malformed persisted trees and round-trips the result", () => {
@@ -61,8 +63,34 @@ describe("recursive dock layout", () => {
     });
     const all = flatten(layout.root);
     expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
-    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "outline", "search"]);
+    expect(all.flatMap((node) => node.type === "tabs" ? node.views : []).sort()).toEqual(["history", "lens", "map", "outline", "search"]);
     expect(sanitizeLayout(JSON.parse(JSON.stringify(layout)) as Record<string, unknown>)).toEqual(layout);
+  });
+
+  it("adds an absent map to a hidden bottom without changing saved dock widths", () => {
+    const original = {
+      root: { type: "split", id: "root-v", direction: "vertical", sizes: [0.7, 0.3], children: [
+        { type: "split", id: "root", direction: "horizontal", sizes: [0.35, 0.65], children: [
+          { type: "tabs", id: "primary", views: ["outline"], activeView: "outline", visible: true },
+          { type: "editor", id: "editor" }
+        ] },
+        { type: "tabs", id: "bottom", views: ["history", "search", "lens"], activeView: "history", visible: false }
+      ] },
+      activityBar: "right", primarySide: "right", secondarySameSide: true
+    } as const;
+    const restored = sanitizeLayout(original as unknown as Record<string, unknown>);
+    const bottom = findViewNode(restored, "map");
+    expect(bottom?.id).toBe("bottom");
+    expect(bottom?.visible).toBe(false);
+    expect(bottom?.activeView).toBe("history");
+    expect(restored.activityBar).toBe("right");
+    expect(restored.primarySide).toBe("right");
+    expect(restored.root.type).toBe("split");
+    if (restored.root.type === "split") {
+      expect(restored.root.sizes).toEqual([0.7, 0.3]);
+      const inside = restored.root.children[0];
+      if (inside?.type === "split") expect(inside.sizes).toEqual([0.35, 0.65]);
+    }
   });
 
   it("migrates fixed slots without dropping sides, sizes, tabs, or visibility", () => {
@@ -79,6 +107,7 @@ describe("recursive dock layout", () => {
     expect(findViewNode(layout, "outline")?.visible).toBe(false);
     expect(findViewNode(layout, "search")?.activeView).toBe("search");
     expect(findViewNode(layout, "history")?.id).toBe("bottom");
+    expect(findViewNode(layout, "map")?.id).toBe("bottom");
     expect(layout.root.type).toBe("split");
   });
 
@@ -112,7 +141,7 @@ describe("recursive dock layout", () => {
     const all = flatten(layout.root);
     expect(all.filter((node) => node.type === "editor")).toHaveLength(1);
     expect(new Set(all.map((node) => node.id)).size).toBe(all.length);
-    expect(listTabsNodes(layout)).toHaveLength(4);
+    expect(listTabsNodes(layout)).toHaveLength(5);
   });
 
   it("updates active tabs, group visibility, and the intended split weights", () => {
