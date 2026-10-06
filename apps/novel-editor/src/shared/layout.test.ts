@@ -118,7 +118,7 @@ describe("recursive dock layout", () => {
     const legacy = projectLayoutV1(layout);
     expect(legacy.primarySidebar).toBe("right");
     expect(legacy.slots.bottom.views).toContain("history");
-    expect([...legacy.slots.primary.views, ...legacy.slots.secondary.views, ...legacy.slots.bottom.views].sort()).toEqual(["history", "lens", "outline", "search"]);
+    expect([...legacy.slots.primary.views, ...legacy.slots.secondary.views, ...legacy.slots.bottom.views].sort()).toEqual(["history", "lens", "map", "outline", "search"]);
   });
 
   it("joins tab groups, reorders tabs, and makes edge drops into nested splits", () => {
@@ -150,9 +150,9 @@ describe("recursive dock layout", () => {
     expect(findViewNode(layout, "history")?.activeView).toBe("history");
     layout = toggleViewVisibility(layout, "history");
     expect(findViewNode(layout, "history")?.visible).toBe(false);
-    const root = layout.root;
-    expect(root.type).toBe("split");
-    if (root.type !== "split") return;
+    const root = findDockNode(layout.root, "root");
+    expect(root?.type).toBe("split");
+    if (root?.type !== "split") return;
     layout = setSplitSizes(layout, root.id, [3, 2, 1]);
     const changed = findDockNode(layout.root, root.id);
     expect(changed?.type).toBe("split");
