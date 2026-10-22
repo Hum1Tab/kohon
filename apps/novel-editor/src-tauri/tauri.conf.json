@@ -44,7 +44,7 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/codex"],
-    "resources": ["../../LICENSE", "../../NOTICE"],
+    "resources": ["../../../LICENSE", "../../../NOTICE"],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
