@@ -2,6 +2,13 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.3.3 - 2026-10-23
+
+### Fixed
+
+- Fixed creating a work, opening a work, and saving chapters on Windows. The Rust side handed the renderer canonical `\\?\C:\…` paths; the renderer's path helpers rebuilt them as `\\?\C:/…`, which `canonicalize` rejects, or as `/?/D:/…`, which failed the managed-path boundary check, so every project file operation was refused. Paths are now simplified before they cross the IPC boundary and the boundary check compares simplified forms.
+- The renderer path helpers now accept a Windows verbatim (`\\?\`) or UNC prefix instead of misreading the drive letter.
+
 ## 0.3.2 - 2026-10-23
 
 ### Fixed
