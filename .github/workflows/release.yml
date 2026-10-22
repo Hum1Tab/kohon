@@ -187,7 +187,11 @@ jobs:
           checksum_file="SHA256SUMS-${{ matrix.platform }}-${{ matrix.arch }}.txt"
           : > "${checksum_file}"
           for file in "${files[@]}"; do
-            digest="$(sha256sum "${file}" | awk '{print $1}')"
+            if command -v sha256sum >/dev/null 2>&1; then
+              digest="$(sha256sum "${file}" | awk '{print $1}')"
+            else
+              digest="$(shasum -a 256 "${file}" | awk '{print $1}')"
+            fi
             printf '%s  %s\n' "${digest}" "${file#./}" >> "${checksum_file}"
           done
 
