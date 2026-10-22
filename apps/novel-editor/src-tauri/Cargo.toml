@@ -1,6 +1,6 @@
 [package]
 name = "kohon"
-version = "0.3.1"
+version = "0.3.2"
 description = "KOHON — local-first Japanese novel writing environment"
 authors = ["KOHON contributors"]
 license = "Apache-2.0"
