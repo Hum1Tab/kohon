@@ -11,6 +11,7 @@ import type {
 
 import { ConnectionManager } from "./connections.js";
 import { appPaths, command, listenEvent, openExternalUrl } from "./ipc.js";
+import { localizeApiErrors } from "./localized-api.js";
 import { currentLocale, safeMessage } from "./locale.js";
 import { createMenuController } from "./menu.js";
 import { ProjectService } from "./projects.js";
@@ -66,26 +67,6 @@ function installGlobalKeybindings(options: {
   };
   window.addEventListener("keydown", handler, true);
   return () => window.removeEventListener("keydown", handler, true);
-}
-
-/** Wrap the bridge so errors from Rust and the project store reach the UI in the selected language. */
-function localizedErrors(api: KohonApi, message: (error: unknown) => string): KohonApi {
-  return new Proxy(api, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver) as unknown;
-      if (typeof value !== "function" || typeof property !== "string" || property.startsWith("on")) return value;
-      return (...args: unknown[]) => {
-        try {
-          const result = Reflect.apply(value, target, args) as unknown;
-          return result instanceof Promise
-            ? result.catch((error: unknown) => { throw new Error(message(error)); })
-            : result;
-        } catch (error) {
-          throw new Error(message(error));
-        }
-      };
-    }
-  });
 }
 
 export async function createDesktopApi(): Promise<KohonApi> {
@@ -239,7 +220,7 @@ export async function createDesktopApi(): Promise<KohonApi> {
   connections.initializeCodex(paths.version, (url) => openExternalUrl(url));
   await connections.initializeOpenAI();
 
-  const api = localizedErrors(raw, (error) => safeMessage(settings, systemLocale, error));
+  const api = localizeApiErrors(raw, (error) => safeMessage(settings, systemLocale, error));
   installGlobalKeybindings({
     platform: paths.platform,
     settings: () => settings,

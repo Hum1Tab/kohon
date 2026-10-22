@@ -28,8 +28,25 @@ function showStartupError(error: unknown): void {
   root.replaceChildren(panel);
 }
 
+// React unmounts the whole tree when a render or effect throws without an error boundary, which used
+// to leave a blank window with no clue. Surface such failures in the same panel as a failed bootstrap.
+let rendered = false;
+
+function reportBlankWindow(error: unknown): void {
+  if (rendered && root.childElementCount === 0) showStartupError(error);
+}
+
+window.addEventListener("error", (event) => {
+  if (!(event instanceof ErrorEvent) || event.message === "") return;
+  reportBlankWindow(event.error ?? event.message);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  reportBlankWindow(event.reason);
+});
+
 async function bootstrap(): Promise<void> {
   window.kohon = Object.freeze(await createDesktopApi());
+  rendered = true;
   createRoot(root).render(<StrictMode><App /></StrictMode>);
 }
 
