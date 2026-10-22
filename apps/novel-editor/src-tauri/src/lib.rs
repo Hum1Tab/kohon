@@ -93,8 +93,33 @@ struct GitHubStatus {
     message: String,
 }
 
+/// Windows canonical paths carry a `\\?\` prefix. The renderer's path helpers rebuild them as
+/// `\\?\C:/…`, which `canonicalize` rejects with os error 123, and their drive detection turns
+/// `\\?\D:\…` into `/?/D:/…`, which then fails the managed-path boundary check. Strip the prefix
+/// before a path crosses the IPC boundary and before comparing managed roots.
+fn simplify_path(path: &Path) -> PathBuf {
+    if !cfg!(windows) {
+        return path.to_path_buf();
+    }
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!("\\\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    if let Some(rest) = text.strip_prefix("//?/UNC/") {
+        return PathBuf::from(format!("\\\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix("//?/") {
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
 fn path_key(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
+    let simplified = simplify_path(path);
+    let text = simplified.to_string_lossy().replace('\\', "/");
     let trimmed = text.trim_end_matches('/').to_owned();
     if cfg!(windows) {
         trimmed.to_lowercase()
@@ -127,7 +152,7 @@ fn normalize_lexical(path: &Path) -> PathBuf {
 
 fn existing_ancestor(path: &Path) -> Result<PathBuf, String> {
     let absolute = if path.is_absolute() {
-        path.to_path_buf()
+        simplify_path(path)
     } else {
         std::env::current_dir()
             .map_err(|error| format!("EIO: current directory: {error}"))?
@@ -177,11 +202,16 @@ fn check_allowed(state: &AppState, path: &Path) -> Result<(), String> {
     if files.iter().any(|file| path_key(file) == path_key(path)) {
         return Ok(());
     }
+    #[cfg(debug_assertions)]
+    {
+        let roots = state.allowed_roots.lock().map(|roots| roots.iter().cloned().collect::<Vec<_>>()).unwrap_or_default();
+        eprintln!("[kohon][denied] path={path:?} key={:?} roots={roots:?}", path_key(path));
+    }
     Err("EACCES: managed path boundary violation".to_owned())
 }
 
 fn resolve_read(state: &AppState, path: &str) -> Result<PathBuf, String> {
-    let canonical = fs::canonicalize(PathBuf::from(path)).map_err(|error| fs_error("read", error))?;
+    let canonical = fs::canonicalize(simplify_path(Path::new(path))).map_err(|error| fs_error("read", error))?;
     check_allowed(state, &canonical)?;
     Ok(canonical)
 }
@@ -193,7 +223,7 @@ fn resolve_write(state: &AppState, path: &str) -> Result<PathBuf, String> {
 }
 
 fn add_root(state: &AppState, path: PathBuf) -> Result<PathBuf, String> {
-    let canonical = fs::canonicalize(&path).map_err(|error| fs_error("canonicalize", error))?;
+    let canonical = fs::canonicalize(simplify_path(&path)).map_err(|error| fs_error("canonicalize", error))?;
     if !canonical.is_dir() {
         return Err("EINVAL: project root must be a directory".to_owned());
     }
@@ -202,7 +232,7 @@ fn add_root(state: &AppState, path: PathBuf) -> Result<PathBuf, String> {
         .lock()
         .map_err(|_| "EIO: roots lock")?
         .insert(canonical.clone());
-    Ok(canonical)
+    Ok(simplify_path(&canonical))
 }
 
 fn http_allowed(url: &reqwest::Url) -> bool {
@@ -377,7 +407,7 @@ fn external_allow_root(state: State<'_, AppState>, path: String, create: Option<
         fs::create_dir_all(&target).map_err(|error| fs_error("create folder", error))?;
     }
     let canonical = if target.exists() {
-        fs::canonicalize(&target).map_err(|error| fs_error("canonicalize", error))?
+        simplify_path(&fs::canonicalize(&target).map_err(|error| fs_error("canonicalize", error))?)
     } else {
         target
     };
@@ -397,7 +427,7 @@ fn external_allow_target(state: State<'_, AppState>, path: String) -> Result<Str
         .lock()
         .map_err(|_| "EIO: files lock")?
         .insert(target.clone());
-    Ok(target.to_string_lossy().into_owned())
+    Ok(simplify_path(&target).to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -502,7 +532,7 @@ fn fs_exists(state: State<'_, AppState>, path: String) -> Result<bool, String> {
 
 #[tauri::command]
 fn fs_realpath(state: State<'_, AppState>, path: String) -> Result<String, String> {
-    resolve_read(&state, &path).map(|path| path.to_string_lossy().into_owned())
+    resolve_read(&state, &path).map(|path| simplify_path(&path).to_string_lossy().into_owned())
 }
 
 fn copy_tree(source: &Path, destination: &Path, exclude_root_names: &HashSet<String>, at_root: bool) -> Result<(), String> {
@@ -561,7 +591,8 @@ fn read_external_text_files(paths: Vec<String>) -> Result<Vec<FileText>, String>
     let mut total = 0_u64;
     let mut result = Vec::new();
     for path in paths {
-        let canonical = fs::canonicalize(&path).map_err(|error| fs_error("read external file", error))?;
+        let canonical = fs::canonicalize(simplify_path(Path::new(&path)))
+            .map_err(|error| fs_error("read external file", error))?;
         let metadata = fs::metadata(&canonical).map_err(|error| fs_error("inspect external file", error))?;
         if !metadata.is_file() {
             return Err("EINVAL: selected path is not a file".to_owned());
@@ -576,7 +607,7 @@ fn read_external_text_files(paths: Vec<String>) -> Result<Vec<FileText>, String>
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         result.push(FileText {
-            path: canonical.to_string_lossy().into_owned(),
+            path: simplify_path(&canonical).to_string_lossy().into_owned(),
             name,
             text,
         });

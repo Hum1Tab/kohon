@@ -27,4 +27,14 @@ describe("browser-safe primitives", () => {
     expect(() => resolveManagedPath("C:/work/book", "../escape.md")).toThrow("boundary");
     expect(resolveManagedPath("C:/work/book", "notes/map.json")).toBe("C:/work/book/notes/map.json");
   });
+
+  it("accepts the Windows canonical verbatim prefix the Rust side reports", () => {
+    expect(normalizePath("\\\\?\\C:\\work\\book")).toBe("C:/work/book");
+    expect(normalizePath("\\\\?\\C:\\work\\book\\kohon.json")).toBe("C:/work/book/kohon.json");
+    expect(normalizePath("\\\\?\\UNC\\server\\share\\book")).toBe("//server/share/book");
+    expect(joinPath("\\\\?\\C:\\work\\book", "manuscript")).toBe("\\\\?\\C:\\work\\book/manuscript");
+    expect(normalizePath(joinPath("\\\\?\\C:\\work\\book", "manuscript"))).toBe("C:/work/book/manuscript");
+    expect(isPathInside("\\\\?\\C:\\work\\book", "c:/work/book/notes/a.md")).toBe(true);
+    expect(resolveManagedPath("\\\\?\\C:\\work\\book", "notes/map.json")).toBe("C:/work/book/notes/map.json");
+  });
 });

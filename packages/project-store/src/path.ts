@@ -8,12 +8,23 @@ function looksWindows(value: string): boolean {
   return /^[A-Za-z]:/u.test(value) || value.includes("\\");
 }
 
+/**
+ * Windows canonical paths arrive as `\\?\C:\…`. That prefix hides the drive letter from the checks
+ * below, so translate it back to a normal path (or a UNC path) before normalizing.
+ */
+function stripWindowsVerbatim(value: string): string {
+  if (value.startsWith("//?/UNC/")) return `//${value.slice("//?/UNC/".length)}`;
+  if (value.startsWith("//?/")) return value.slice("//?/".length);
+  return value;
+}
+
 export function normalizePath(value: string): string {
   const windows = looksWindows(value);
-  const source = value.replaceAll("\\", "/");
+  const source = stripWindowsVerbatim(value.replaceAll("\\", "/"));
+  const unc = source.startsWith("//");
   const drive = /^([A-Za-z]:)(?:\/|$)/u.exec(source);
   const absolute = drive !== null || source.startsWith("/");
-  let prefix = drive === null ? (source.startsWith("/") ? "/" : "") : `${drive[1]}/`;
+  let prefix = drive === null ? (source.startsWith("/") ? (unc ? "//" : "/") : "") : `${drive[1]}/`;
   const rest = source.slice(prefix.length);
   const parts: string[] = [];
   for (const part of rest.split("/")) {
