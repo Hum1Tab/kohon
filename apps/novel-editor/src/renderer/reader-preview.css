@@ -1,0 +1,14 @@
+.reader-clue-stages { display:flex; flex-wrap:wrap; gap:5px; }
+.reader-clue-comparison { margin:12px 0 0; }
+.reader-clue-comparison>div { padding:10px 12px; border-left:2px solid var(--nl-line); background:var(--nl-surface-subtle); }
+.reader-clue-comparison>div+div { margin-top:10px; border-left-color:var(--nl-accent); }
+.reader-clue-comparison dt { font-size:11px; color:var(--nl-muted); margin-bottom:7px; }
+.reader-clue-comparison dd { margin:0; font-size:12px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; }
+.reader-clue-comparison dd strong { display:block; font-size:12px; margin-bottom:6px; }
+.reader-clue-comparison dd p { margin-bottom:0; }
+.reader-preview .reader-clue-help { font-size:11px; }
+.reader-manuscript-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:-4px 0 16px; }
+.reader-manuscript-actions .scene-manuscript-link { margin:0; }
+.reader-manuscript-actions .scene-manuscript-unlinked { margin:0; }
+.reader-manuscript-actions .story-help { margin:6px 0; }
+.reader-knowledge-help { color:var(--nl-muted); font-size:11px; line-height:1.7; }

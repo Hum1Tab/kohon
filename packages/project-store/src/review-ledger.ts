@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./hash.js";
 
 /** The JSON version is deliberately small and can be migrated without touching the manuscript. */
 export const REVIEW_LEDGER_SCHEMA_VERSION = 1 as const;
@@ -41,6 +41,8 @@ export interface ReviewLedgerEntry {
   exactQuote: string;
   anchor: ReviewAnchor;
   status: ReviewStatus;
+  /** Author's revision decision or rationale, separate from AI evidence. */
+  authorNote?: string;
   anchorStatus: ReviewAnchorStatus;
   createdAt: string;
   updatedAt: string;
@@ -144,6 +146,8 @@ function validateEntry(value: unknown): ReviewLedgerEntry {
   const cutoffChapter = optionalString(schema, "cutoffChapter");
   const checkpoint = optionalString(schema, "checkpoint");
   const finding = optionalFinding(schema["finding"]);
+  const authorNote = optionalString(schema, "authorNote");
+  if (authorNote !== undefined && authorNote.length > 4000) throw new Error("invalid review ledger: authorNote");
   const anchor = validateAnchor(schema["anchor"]);
   return {
     id,
@@ -161,6 +165,7 @@ function validateEntry(value: unknown): ReviewLedgerEntry {
     exactQuote,
     anchor,
     status,
+    ...(authorNote === undefined ? {} : { authorNote }),
     anchorStatus,
     createdAt,
     updatedAt
@@ -232,7 +237,7 @@ export function calculateReviewAnchor(text: string, exactQuote: string): Calcula
 
 function generatedId(input: CreateReviewFindingInput, createdAt: string): string {
   const material = JSON.stringify([input.role, input.manuscriptVersionHash, input.chapterId, input.exactQuote, createdAt]);
-  return `review-${createHash("sha256").update(material).digest("hex").slice(0, 24)}`;
+  return `review-${sha256Hex(material).slice(0, 24)}`;
 }
 
 function findingDetails(input: CreateReviewFindingInput): ReviewFindingDetails | undefined {
@@ -292,6 +297,21 @@ export function updateReviewFindingStatus(ledger: ReviewLedger, id: string, stat
     if (entry.id !== id) return entry;
     found = true;
     return setAuthorFindingStatus(entry, status, updatedAt);
+  });
+  if (!found) throw new Error("review finding not found");
+  return { schemaVersion: REVIEW_LEDGER_SCHEMA_VERSION, entries };
+}
+
+/** An author note never changes AI feedback, lifecycle status or manuscript evidence. */
+export function updateReviewAuthorNote(ledger: ReviewLedger, id: string, note: string, updatedAt = new Date().toISOString()): ReviewLedger {
+  if (typeof note !== "string" || note.length > 4000) throw new Error("invalid review ledger: authorNote");
+  if (typeof updatedAt !== "string" || updatedAt.length === 0) throw new Error("invalid review ledger: updatedAt");
+  let found = false;
+  const entries = ledger.entries.map(entry => {
+    if (entry.id !== id) return entry;
+    found = true;
+    const { authorNote: _previousNote, ...rest } = entry;
+    return { ...rest, ...(note.trim().length === 0 ? {} : { authorNote: note }), updatedAt };
   });
   if (!found) throw new Error("review finding not found");
   return { schemaVersion: REVIEW_LEDGER_SCHEMA_VERSION, entries };

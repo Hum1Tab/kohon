@@ -21,6 +21,14 @@ describe("editor session", () => {
     expect(restored.groups[0]!.tabs).toEqual([{ chapterId: "a", selectionStart: 0, selectionEnd: 4, scrollTop: 0, scrollLeft: 0 }]);
   });
 
+  it("retains the reading position in a persisted vertical manuscript", () => {
+    const session = updateEditorTabView(defaultEditorSession("a"), "group-1", "a", { selectionStart: 4052, selectionEnd: 4081, scrollLeft: -2634.5 });
+    const restored = sanitizeEditorSession(JSON.parse(JSON.stringify(session)), ["a"]);
+    expect(restored.groups[0]!.tabs[0]).toMatchObject({ selectionStart: 4052, selectionEnd: 4081, scrollLeft: -2634 });
+    const malformed = sanitizeEditorSession({ groups: [{ tabs: [{ chapterId: "a", scrollLeft: Infinity, scrollTop: -10, selectionStart: -1 }] }] }, ["a"]);
+    expect(malformed.groups[0]!.tabs[0]).toMatchObject({ scrollLeft: 0, scrollTop: 0, selectionStart: 0 });
+  });
+
   it("reorders a tab within its group and keeps it active", () => {
     let session = openEditorTab(openEditorTab(defaultEditorSession("a"), "b"), "c");
     session = updateEditorTabView(session, "group-1", "b", { selectionStart: 4, scrollTop: 24 });

@@ -2,7 +2,81 @@
 
 All notable changes to KOHON are documented here.
 
-## Unreleased
+## 0.3.0 - 2026-10-23
+
+### Changed
+
+- Migrated the desktop shell from Electron to Tauri v2: the React UI now talks to a Rust backend through Tauri commands, with capabilities limited to the window, menu, and file dialogs it actually uses.
+- Replaced `electron-builder` packaging with `tauri build` (NSIS on Windows, dmg on macOS, AppImage and deb on Linux) and updated the release workflow to native Tauri builds.
+- Removed the Electron main process, preload bridge, and their duplicated Codex/update modules so one desktop implementation remains.
+- Windows releases no longer ship a portable executable; updates open the GitHub release page instead of running an installer automatically.
+
+### Added
+
+- Added a "根拠監査" (evidence audit) lens role that ties every finding to a verbatim quote, its warrant, and a falsifier.
+- Added a one-click review brief export that packages the manuscript, notes, and open findings into a quote-anchored Markdown dossier, adapted from the evidence-first protocol of `Hum1Tab/universal-article-writer`.
+
+## 0.2.4 - 2026-09-09
+
+### Changed
+
+- Refreshed KOHON branding and added a recent-project library with save-before-return navigation.
+- Simplified the writing workbench with a compact icon rail, flat panels, command search, and fewer always-visible controls.
+- Moved infrequent actions into menus, collapsed replacement controls, and reduced duplicate headings and manuscript statistics.
+
+### Fixed
+
+- Corrected dock sizing so visible panels fill the available space after another panel is hidden.
+- Validated recent-project paths before reopening them.
+
+## 0.2.3 - 2026-09-05
+
+### Fixed
+
+- Fixed ChatGPT/Codex lens runs failing at thread creation because the current App Server protocol expects the legacy `sandbox` mode value `read-only` rather than `readOnly`.
+
+## 0.2.2 - 2026-09-04
+
+### Changed
+
+- Removed the connection, model, and reading-boundary selectors from the everyday Editorial Lens panel; connection and model choices remain available in Settings where they belong.
+- Editorial Lens now automatically reads through the current chapter, keeps its exact chapter list collapsed until requested, and only shows connection setup when action is required.
+
+## 0.2.1 - 2026-09-04
+
+### Changed
+
+- Simplified panel dragging to show only one subtle preview for the current drop destination instead of displaying five boxes on every panel.
+- Removed the floating drag label and redundant panel outlines for a quieter, VS Code-like docking interaction.
+
+## 0.2.0 - 2026-09-04
+
+### Added
+
+- Replaced the fixed three-slot workbench with a recursive dock tree that supports arbitrarily nested horizontal and vertical panel groups.
+- Added five-zone drag targets on tool panels: drop on an edge to split, or in the center to join the target tab group.
+- Added per-split pointer and keyboard resizing, persisted split ratios, tab order, active tabs, and visibility.
+- Added keyboard-operable layout settings for moving each view around the manuscript or joining any other tab group.
+
+### Changed
+
+- Focus mode now renders only the manuscript editor regardless of the saved dock tree.
+- Existing Novel Lens and KOHON fixed-slot settings migrate to the new layout without changing manuscript files.
+
+## 0.1.2 - 2026-09-04
+
+### Fixed
+
+- Fixed a React hook-order crash that left the workbench completely blank after opening or creating a project.
+- Restored opening existing `kohon.json` and legacy `novel-lens.json` projects without changing manuscript data.
+- Removed the repetitive project-opened success banner; actionable errors and save warnings remain visible.
+
+## 0.1.1 - 2026-09-03
+
+### Added
+
+- Added Japanese, English, and operating-system language choices in Settings, covering the workbench, native menus, dialogs, connection states, update states, and default chapter/scene names.
+- Added a Japanese/English language selector to the Windows installer.
 
 ### Improved
 

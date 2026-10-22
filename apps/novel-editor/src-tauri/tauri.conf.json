@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KOHON",
+  "version": "0.3.0",
+  "identifier": "io.github.hum1tab.kohon",
+  "build": {
+    "beforeDevCommand": "pnpm dev:renderer",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build:renderer && pnpm stage:codex",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "KOHON",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 980,
+        "minHeight": 680,
+        "decorations": false,
+        "resizable": true,
+        "visible": true,
+        "focus": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Local-first Japanese novel writing environment",
+    "longDescription": "KOHON is a local-first Japanese novel writing environment with recoverable history, planning boards, and evidence-backed AI feedback.",
+    "copyright": "Copyright KOHON contributors",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/codex"],
+    "resources": ["../../LICENSE", "../../NOTICE"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Japanese", "English"],
+        "displayLanguageSelector": true
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  }
+}

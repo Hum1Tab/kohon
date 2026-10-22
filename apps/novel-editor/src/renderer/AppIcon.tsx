@@ -1,10 +1,10 @@
-import { useId, type ReactNode, type SVGProps } from "react";
+import { type ReactNode, type SVGProps } from "react";
 
 export type IconName =
-  | "logo" | "files" | "lens" | "search" | "history" | "settings" | "layout"
+  | "story" | "logo" | "files" | "lens" | "search" | "history" | "settings" | "layout"
   | "sun" | "moon" | "new" | "open" | "checkpoint" | "export" | "add"
   | "import" | "focus" | "panel" | "edit" | "close" | "check"
-  | "splitRight" | "splitDown" | "more";
+  | "splitRight" | "splitDown" | "more" | "menu" | "commands";
 
 export interface AppIconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
   name: IconName;
@@ -14,11 +14,12 @@ export interface AppIconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
 }
 
 const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
+  story: <><path d="M3 19h18M3 19V4M5 14l5-7 4 5 6-8M5 17l5-5 4 4 6-6" /><circle cx="10" cy="7" r="1.5" /></>,
   files: <><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4H14l5 5v8.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 17.5Z" /><path d="M14 4v5h5M8.5 13h7M8.5 16h5" /></>,
-  lens: <><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7Z" /><path d="m18.5 15 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7Z" /></>,
+  lens: <><rect x="3" y="9" width="7" height="7" rx="2.5" /><rect x="14" y="9" width="7" height="7" rx="2.5" /><path d="M10 11h4M3 11l1-6M21 11l-1-6" /></>,
   search: <><circle cx="10.8" cy="10.8" r="6.2" /><path d="m16 16 4.5 4.5" /></>,
   history: <><path d="M4 11a8 8 0 1 0 2.4-5.7" /><path d="M4 5v6h6M12 7v5l3.5 2" /></>,
-  settings: <><path d="m12 3 1.2 2.1 2.3.5 2-1.1 1.9 1.9-1.1 2 .5 2.3L21 12l-2.1 1.2-.5 2.3 1.1 2-1.9 1.9-2-1.1-2.3.5L12 21l-1.2-2.1-2.3-.5-2 1.1-1.9-1.9 1.1-2L5.2 13 3 12l2.2-1.1.5-2.3-1.1-2 1.9-1.9 2 1.1 2.3-.5Z" /><circle cx="12" cy="12" r="3" /></>,
+  settings: <><path d="M9.48 5.58Q9.95 5.31 10.08 4.77L10.42 3.4Q10.55 2.86 11.1 2.86L12.9 2.86Q13.45 2.86 13.58 3.4L13.92 4.77Q14.05 5.31 14.52 5.58L16.3 6.61Q16.77 6.88 17.3 6.73L18.66 6.33Q19.19 6.18 19.46 6.66L20.36 8.21Q20.64 8.69 20.24 9.07L19.22 10.04Q18.82 10.43 18.82 10.98L18.82 13.02Q18.82 13.57 19.22 13.96L20.24 14.93Q20.64 15.31 20.36 15.79L19.46 17.34Q19.19 17.82 18.66 17.67L17.3 17.27Q16.77 17.12 16.3 17.39L14.52 18.42Q14.05 18.69 13.92 19.23L13.58 20.6Q13.45 21.14 12.9 21.14L11.1 21.14Q10.55 21.14 10.42 20.6L10.08 19.23Q9.95 18.69 9.48 18.42L7.7 17.39Q7.23 17.12 6.7 17.27L5.34 17.67Q4.81 17.82 4.54 17.34L3.64 15.79Q3.36 15.31 3.76 14.93L4.78 13.96Q5.18 13.57 5.18 13.02L5.18 10.98Q5.18 10.43 4.78 10.04L3.76 9.07Q3.36 8.69 3.64 8.21L4.54 6.66Q4.81 6.18 5.34 6.33L6.7 6.73Q7.23 6.88 7.7 6.61Z" /><circle cx="12" cy="12" r="3" /></>,
   layout: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 4v16M9 11h11" /></>,
   sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   moon: <path d="M19.5 15.2A7.8 7.8 0 0 1 8.8 4.5 8.2 8.2 0 1 0 19.5 15.2Z" />,
@@ -35,21 +36,23 @@ const paths: Record<Exclude<IconName, "logo">, ReactNode> = {
   check: <><circle cx="12" cy="12" r="8.5" /><path d="m8 12 2.7 2.7L16.5 9" /></>,
   splitRight: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M12 4v16" /></>,
   splitDown: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M3.5 12h17" /></>,
-  more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>
+  more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  commands: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" /></>
 };
 
 export function AppIcon({ name, size = 20, tile = false, title, className, ...props }: AppIconProps) {
-  const id = useId().replace(/:/gu, "");
+  const logo = name === "logo";
   const label = title ?? (name === "logo" ? "KOHON" : undefined);
   return <svg
     {...props}
-    className={className}
+    className={[logo ? "kohon-logo" : "", tile ? "kohon-logo-tile" : "", className].filter(Boolean).join(" ")}
     width={size}
     height={size}
-    viewBox={tile ? "0 0 64 64" : "0 0 24 24"}
+    viewBox={logo ? "0 0 1024 1024" : "0 0 24 24"}
     fill="none"
     stroke="currentColor"
-    strokeWidth={tile ? 0 : 1.8}
+    strokeWidth={logo ? 0 : 1.8}
     strokeLinecap="round"
     strokeLinejoin="round"
     role={label ? "img" : "presentation"}
@@ -57,21 +60,6 @@ export function AppIcon({ name, size = 20, tile = false, title, className, ...pr
     aria-label={label}
   >
     {label && <title>{label}</title>}
-    {tile ? <>
-      <defs>
-        <linearGradient id={`app-icon-bg-${id}`} x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse"><stop stopColor="#3f7164" /><stop offset="1" stopColor="#203f38" /></linearGradient>
-        <filter id={`app-icon-shadow-${id}`} x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#10231f" floodOpacity=".3" /></filter>
-      </defs>
-      <rect x="4" y="4" width="56" height="56" rx="17" fill={`url(#app-icon-bg-${id})`} filter={`url(#app-icon-shadow-${id})`} />
-      <g filter={`url(#app-icon-shadow-${id})`}>
-        <path d="M14 17c7-2 13-.5 18 4v28c-5-4-11-5.5-18-3.5V17Z" fill="#fffaf0" />
-        <path d="M50 17c-7-2-13-.5-18 4v28c5-4 11-5.5 18-3.5V17Z" fill="#f1e5cf" />
-        <path d="M32 21v28" stroke="#d5c4a7" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M18 25h9M18 30h10M18 35h8" stroke="#8c8172" strokeWidth="1.5" strokeLinecap="round" opacity=".72" />
-      </g>
-      <circle cx="43" cy="31" r="8" fill="#d49a48" stroke="#fff7e7" strokeWidth="2" />
-      <circle cx="43" cy="31" r="4" fill="#315d51" />
-      <path d="m49 37 8 8" stroke="#d49a48" strokeWidth="4" strokeLinecap="round" />
-    </> : name === "logo" ? <><path d="M3 6c4-1.4 7-.5 9 2.2V20c-2.4-2.1-5.4-2.8-9-1.7V6ZM21 6c-4-1.4-7-.5-9 2.2V20c2.4-2.1 5.4-2.8 9-1.7V6Z" /><circle cx="17" cy="11" r="3" /><path d="m19.2 13.2 2.8 2.8" /></> : paths[name]}
+    {logo ? <image href={new URL("../../build/icon.svg", import.meta.url).href} width="1024" height="1024" /> : paths[name]}
   </svg>;
 }

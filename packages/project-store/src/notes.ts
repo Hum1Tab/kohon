@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "./random.js";
 
 export const NOTE_INDEX_SCHEMA_VERSION = 1 as const;
 export const NOTE_INDEX_PATH = "notes/index.json" as const;

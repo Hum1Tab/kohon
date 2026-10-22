@@ -28,6 +28,11 @@ function finiteOffset(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
+// Chromium's vertical-rl textareas use negative horizontal offsets.
+function finiteHorizontalOffset(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
+}
+
 function tab(chapterId: string): EditorTabState {
   return { chapterId, selectionStart: 0, selectionEnd: 0, scrollTop: 0, scrollLeft: 0 };
 }
@@ -58,7 +63,7 @@ export function sanitizeEditorSession(raw: unknown, chapterIds: readonly string[
       seen.add(chapterId);
       const selectionStart = finiteOffset(candidate["selectionStart"]);
       const selectionEnd = Math.max(selectionStart, finiteOffset(candidate["selectionEnd"]));
-      tabs.push({ chapterId, selectionStart, selectionEnd, scrollTop: finiteOffset(candidate["scrollTop"]), scrollLeft: finiteOffset(candidate["scrollLeft"]) });
+      tabs.push({ chapterId, selectionStart, selectionEnd, scrollTop: finiteOffset(candidate["scrollTop"]), scrollLeft: finiteHorizontalOffset(candidate["scrollLeft"]) });
     }
     const requestedActive = value["activeChapterId"];
     const activeChapterId = typeof requestedActive === "string" && tabs.some((item) => item.chapterId === requestedActive) ? requestedActive : tabs[0]?.chapterId ?? null;

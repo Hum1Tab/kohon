@@ -1,4 +1,4 @@
-export type RoleId = "first-reader" | "editor" | "critic" | "consistency" | "setting";
+export type RoleId = "first-reader" | "editor" | "critic" | "consistency" | "setting" | "evidence";
 
 export interface RoleDefinition { id: RoleId; label: string; description: string; systemInstruction: string; }
 
@@ -7,7 +7,8 @@ export const ROLE_REGISTRY: Readonly<Record<RoleId, RoleDefinition>> = {
   editor: { id: "editor", label: "編集者", description: "構成、表現、読みやすさの改善候補を整理します。", systemInstruction: "編集者として、改善候補を優先度と理由つきで示してください。本文を書き換えず、判断材料と根拠を提示してください。" },
   critic: { id: "critic", label: "批評家", description: "作品の効果、主題、語りの選択を批評します。", systemInstruction: "批評家として、解釈と観察を区別し、断定できないことを明示してください。引用を根拠に、敬意を保って批評してください。" },
   consistency: { id: "consistency", label: "整合性確認", description: "人物、時系列、設定の矛盾候補を探します。", systemInstruction: "整合性確認役として、矛盾を断定せず候補として示してください。該当箇所を引用し、未検査範囲と推測を明示してください。" },
-  setting: { id: "setting", label: "設定確認", description: "世界観・用語・設定の提示と一貫性を確認します。", systemInstruction: "設定確認役として、本文から確認できる設定を整理し、未提示の設定を創作しないでください。用語や描写の根拠を引用してください。" }
+  setting: { id: "setting", label: "設定確認", description: "世界観・用語・設定の提示と一貫性を確認します。", systemInstruction: "設定確認役として、本文から確認できる設定を整理し、未提示の設定を創作しないでください。用語や描写の根拠を引用してください。" },
+  evidence: { id: "evidence", label: "根拠監査", description: "指摘を逐語引用・論拠・反証条件に結びつけ、根拠のない推測を分離します。", systemInstruction: "根拠監査役として、すべての指摘に本文の逐語引用を付け、その引用が指摘を支える理由（Warrant）と、どんな本文記述があれば指摘を取り下げるか（反証条件）を書いてください。引用できない推測は「根拠なし」と明記し、断定しないでください。本文を書き換えず、根拠の強さ（直接／間接／なし）を区別してください。" }
 };
 
 export function getRole(id: RoleId): RoleDefinition { return ROLE_REGISTRY[id]; }

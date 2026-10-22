@@ -8,6 +8,11 @@ coverage/
 *.tsbuildinfo
 **/release/
 
+# Tauri build outputs and staged sidecars
+apps/novel-editor/src-tauri/target/
+apps/novel-editor/src-tauri/binaries/
+apps/novel-editor/src-tauri/gen/
+
 # Credentials and local configuration
 .env
 .env.*

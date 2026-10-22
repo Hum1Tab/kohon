@@ -1,10 +1,12 @@
 import type { RoleId } from "@kohon/editor-core";
 import type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus } from "@kohon/project-store";
 import type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+import type { AppLanguage, AppLocale } from "./locale.js";
 import type { EditorSessionState } from "./editor-session.js";
 
 export type { Chapter, ChapterKind, ChapterMetadata, ChapterStatus, NoteDocument, NoteKind, NoteMeta, ProjectDiff, ProjectManifest, ProjectSettings, ReviewLedgerEntry, ReviewStatus, RoleId };
 export type { AppCommandId, UserSettings, UserSettingsPatch } from "./settings.js";
+export type { AppLanguage, AppLocale } from "./locale.js";
 export type { EditorSessionState } from "./editor-session.js";
 
 export interface ProjectSummary {
@@ -143,9 +145,12 @@ export interface CodexModelOption {
   id: string;
   displayName: string;
   isDefault: boolean;
+  defaultReasoningEffort?: string;
+  supportedReasoningEfforts?: string[];
 }
 
 export interface CodexConnectionStatus {
+  runtime?: CodexRuntimeStatus;
   installed: boolean;
   connected: boolean;
   state: "unavailable" | "starting" | "signed-out" | "authenticating" | "connected" | "error";
@@ -156,6 +161,15 @@ export interface CodexConnectionStatus {
   modelsUpdatedAt: string | null;
   usedPercent: number | null;
   resetsAt: number | null;
+}
+
+export interface CodexRuntimeStatus {
+  automatic: boolean;
+  state: "idle" | "checking" | "downloading" | "ready" | "current" | "error" | "unsupported";
+  currentVersion: string | null;
+  latestVersion: string | null;
+  checkedAt: string | null;
+  message: string;
 }
 
 export interface GitHubConnectionStatus {
@@ -183,14 +197,26 @@ export interface UpdateStatus {
   message: string;
 }
 
+export interface RecentProject {
+  root: string;
+  title: string;
+  lastOpenedAt: string;
+}
+
 export interface KohonApi {
+  readStoryMap(root: string): Promise<import("@kohon/project-store").StoryMap>;
+  saveStoryMap(root: string, map: import("@kohon/project-store").StoryMap, expectedRevision: number): Promise<import("@kohon/project-store").StoryMap>;
   appInfo(): Promise<AppInfo>;
+  appMenu(): Promise<{ index: number; label: string }[]>;
+  showAppMenu(options?: { index: number; x: number; y: number }): Promise<void>;
   getUserSettings(): Promise<UserSettings>;
   updateUserSettings(patch: UserSettingsPatch): Promise<UserSettings>;
   resetKeybindings(): Promise<UserSettings>;
   setKeybindingRecording(active: boolean): Promise<void>;
   createProject(title: string): Promise<ProjectSummary | null>;
   openProject(): Promise<ProjectSummary | null>;
+  recentProjects(): Promise<RecentProject[]>;
+  openRecentProject(root: string): Promise<ProjectSummary>;
   refreshProject(root: string): Promise<ProjectSummary>;
   readChapter(root: string, chapterId: string): Promise<ChapterDocument>;
   saveChapter(root: string, chapterId: string, text: string): Promise<ChapterSaveResult>;
@@ -221,9 +247,11 @@ export interface KohonApi {
   createVariation(root: string): Promise<string | null>;
   exportMarkdown(root: string): Promise<string | null>;
   exportText(root: string): Promise<string | null>;
+  exportReviewBrief(root: string): Promise<string | null>;
   runLens(input: LensRunInput): Promise<LensRunResult>;
   listReviewFindings(root: string): Promise<ReviewLedgerEntry[]>;
   setReviewFindingStatus(root: string, id: string, status: ReviewStatus): Promise<ReviewLedgerEntry[]>;
+  setReviewAuthorNote(root: string, id: string, note: string): Promise<ReviewLedgerEntry[]>;
   recheckReviewFinding(root: string, id: string): Promise<ReviewLedgerEntry[]>;
   listNotes(root: string): Promise<NoteMeta[]>;
   readNote(root: string, id: string): Promise<NoteDocument>;
@@ -234,6 +262,7 @@ export interface KohonApi {
   loginCodex(): Promise<ConnectionStatus>;
   logoutCodex(): Promise<ConnectionStatus>;
   refreshCodexModels(): Promise<ConnectionStatus>;
+  checkCodexRuntimeUpdates(): Promise<ConnectionStatus>;
   connectOpenAI(apiKey: string): Promise<ConnectionStatus>;
   disconnectOpenAI(): Promise<ConnectionStatus>;
   loginGitHub(): Promise<ConnectionStatus>;

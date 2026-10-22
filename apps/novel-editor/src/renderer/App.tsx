@@ -1,7 +1,10 @@
+import {DEFAULT_CODEX_MODEL} from "../shared/codex-model.js";
 import { textStats, type TextStats } from "@kohon/editor-core";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { createSceneAnchor } from "@kohon/project-store/story-map";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { isHexColor, resolveManuscriptPalette, type ManuscriptTheme } from "../shared/editor-theme.js";
+import { dockFlexWeights } from "../shared/layout.js";
 import { applyRecoveryDraft, beginSave, createEditorBuffers, dismissRecoveryConflict, editBuffer, loadBuffer, pruneBuffers, saveFailed, saveSucceeded, type EditorBuffersState } from "../shared/editor-buffers.js";
 import { closeEditorGroup, closeEditorTab, defaultEditorSession, moveEditorTab, openEditorTab, splitEditor, updateEditorTabView, type EditorGroupId, type EditorSessionState, type EditorTabState } from "../shared/editor-session.js";
 import { findLiteralMatches, replaceAllLiteral, replaceTextMatch } from "../shared/editor-find.js";
@@ -12,19 +15,21 @@ import {
   COMMAND_DEFINITIONS,
   defaultLayout,
   defaultUserSettings,
-  EDITOR_SCROLL_MIN_HEIGHT,
-  LAYOUT_LIMITS,
-  moveSlotToSide,
-  moveView,
-  placeViewOnSide,
+  dockView,
+  findDockNode,
+  findViewNode,
   formatKeybinding,
-  sideOf,
-  slotOf,
+  setSplitSizes,
+  setTabsActive,
+  toggleViewVisibility,
+  revealView as revealDockView,
   VIEW_IDS,
   type LayoutPreferences,
   type AppCommandId,
+  type DockNode,
+  type DockTabsNode,
+  type DockZone,
   type PhysicalSide,
-  type SlotId,
   type UserSettingsPatch,
   type ViewId
 } from "../shared/settings.js";
@@ -40,12 +45,12 @@ import type {
   LensMessage,
   LensProviderId,
   LensRunResult,
-  LensScopeMode,
   NoteDocument,
   NoteMeta,
   ProjectSettings,
   ProjectDiff,
   ProjectSummary,
+  RecentProject,
   RecoveryDraftResult,
   ReviewLedgerEntry,
   ReviewStatus,
@@ -54,26 +59,32 @@ import type {
   UpdateStatus
 } from "../shared/types.js";
 import { defaultChapterTitle, defaultSceneTitle } from "../shared/chapter-title.js";
+import { commandCategory, commandLabel, resolveAppLocale, uiText } from "../shared/locale.js";
 import { SettingsView, type SettingsCategory } from "./SettingsView.js";
 import { AppIcon } from "./AppIcon.js";
 import { QuickAccess, type QuickAccessItem } from "./QuickAccess.js";
 import { EditorPane } from "./EditorPane.js";
-import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, Welcome, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
+import { revealManuscriptRange } from "./reveal-manuscript.js";
+import { editOriginForInput } from "../shared/editor-navigation.js";
+import { refreshLensAnchor } from "../shared/lens-anchor.js";
+import { ProjectHome } from "./ProjectHome.js";
+import { ChapterMetadataPanel, DEFAULT_QUERY, EMPTY_THREADS, HistoryPanel, LensPanel, OutlineNotes, SearchPanel, TextPrompt, type NoteDraft, type SaveState, type TextPromptOptions, type TextPromptRequest } from "./Panels.js";
+import { LocaleProvider } from "./LocaleContext.js";
+import { useDisclosureDismiss } from "./useDisclosureDismiss.js";
+import { StoryMapPanel } from "./StoryMapPanel.js";
+import { useStoryMap } from "./useStoryMap.js";
+import { WindowTitlebar } from "./WindowTitlebar.js";
 
 type QuickAccessMode = "commands" | "chapters";
 type EditorTabDragState = { groupId: EditorGroupId; chapterId: string };
 type EditorTabDropState = { groupId: EditorGroupId; index: number };
 type EditorInputSnapshot = { groupId: EditorGroupId; chapterId: string; text: string; selection: TextSelection; origin?: EditOrigin };
 type DropTarget =
-  | { kind: "slot-tab"; slot: SlotId; index: number }
-  | { kind: "side-edge"; side: PhysicalSide }
-  | { kind: "bottom-edge" }
+  | { kind: "dock-zone"; nodeId: string; zone: DockZone; index?: number }
   | { kind: "reject" };
 
 interface DockDragState {
   view: ViewId;
-  x: number;
-  y: number;
   target: DropTarget;
 }
 
@@ -84,23 +95,18 @@ interface ViewMenuState {
 }
 
 const VIEW_LABELS: Record<ViewId, string> = {
-  outline: "章・場面",
-  lens: "編集レンズ",
-  search: "作品内検索",
+  outline: "ファイル",
+  lens: "レンズ",
+  search: "検索",
+  story: "物語マップ",
   history: "履歴"
 };
-function applyDropTarget(layout: LayoutPreferences, view: ViewId, target: DropTarget): LayoutPreferences {
-  if (target.kind === "reject") return layout;
-  if (target.kind === "slot-tab") {
-    const source = slotOf(layout, view);
-    const sourceIndex = source === target.slot ? layout.slots[source].views.indexOf(view) : -1;
-    const correctedIndex = sourceIndex >= 0 && sourceIndex < target.index ? target.index - 1 : target.index;
-    return moveView(layout, view, target.slot, correctedIndex);
-  }
-  if (target.kind === "bottom-edge") return moveView(layout, view, "bottom");
-  return placeViewOnSide(layout, view, target.side);
-}
 
+function dockNodeVisible(node: DockNode): boolean {
+  if (node.type === "editor") return true;
+  if (node.type === "tabs") return node.visible && node.views.length > 0;
+  return node.children.some(dockNodeVisible);
+}
 const DEFAULT_CONNECTIONS: ConnectionStatus = {
   codex: { installed: false, connected: false, state: "unavailable", message: "Codex実行環境をまだ確認していません。", email: null, planType: null, models: [], modelsUpdatedAt: null, usedPercent: null, resetsAt: null },
   openai: { connected: false, state: "disconnected", storage: "none", message: "OpenAI APIは未接続です。", verifiedAt: null },
@@ -128,6 +134,9 @@ function noteDraftMatches(document: NoteDocument | null, draft: NoteDraft | null
 export function App(): ReactNode {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [userSettings, setUserSettings] = useState(defaultUserSettings);
+  const locale = resolveAppLocale(userSettings.general.language, window.navigator.language);
+  const t = useCallback((japanese: string) => uiText(locale, japanese), [locale]);
+  const viewLabel = useCallback((view: ViewId) => t(VIEW_LABELS[view]), [t]);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -135,6 +144,8 @@ export function App(): ReactNode {
   const [connections, setConnections] = useState<ConnectionStatus>(DEFAULT_CONNECTIONS);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [project, setProject] = useState<ProjectSummary | null>(null);
+  const story = useStoryMap(project?.root ?? null);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
   const [editorSession, setEditorSession] = useState<EditorSessionState>(() => defaultEditorSession());
   const [editorBuffers, setEditorBuffers] = useState<EditorBuffersState>(() => createEditorBuffers());
   const [editorStats, setEditorStats] = useState<Record<string, TextStats>>({});
@@ -155,13 +166,14 @@ export function App(): ReactNode {
   const [historyDiff, setHistoryDiff] = useState<ProjectDiff | null>(null);
   const [role, setRole] = useState<RoleId>("first-reader");
   const [provider, setProvider] = useState<LensProviderId>("mock");
-  const [modelId, setModelId] = useState("gpt-5.6-luna");
-  const [lensQuery, setLensQuery] = useState(DEFAULT_QUERY);
-  const [scopeMode, setScopeMode] = useState<LensScopeMode>("through-current");
-  const [scopeApproved, setScopeApproved] = useState(false);
+  const [modelId, setModelId] = useState(DEFAULT_CODEX_MODEL);
+  const [lensQuery, setLensQuery] = useState(() => uiText(resolveAppLocale(defaultUserSettings().general.language, window.navigator.language), DEFAULT_QUERY));
   const [threads, setThreads] = useState<Record<RoleId, LensMessage[]>>(EMPTY_THREADS);
   const [lensResult, setLensResult] = useState<LensRunResult | null>(null);
   const [reviewFindings, setReviewFindings] = useState<ReviewLedgerEntry[]>([]);
+  const [reviewNoteDrafts, setReviewNoteDrafts] = useState<Record<string, string>>({});
+  const currentProjectRoot = useRef<string | null>(null);
+  currentProjectRoot.current = project?.root ?? null;
   const [lensBusy, setLensBusy] = useState(false);
   const [textPrompt, setTextPrompt] = useState<TextPromptRequest | null>(null);
   const [quickAccessMode, setQuickAccessMode] = useState<QuickAccessMode | null>(null);
@@ -189,6 +201,7 @@ export function App(): ReactNode {
   const queuedSaveRef = useRef(new Map<string, string>());
   const sessionHydratedRootRef = useRef<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const outlineCreateMenuRef = useDisclosureDismiss();
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuOriginRef = useRef<HTMLElement | null>(null);
   const dockSessionRef = useRef<DockDragState | null>(null);
@@ -202,6 +215,11 @@ export function App(): ReactNode {
   const pendingInputRef = useRef<EditorInputSnapshot | null>(null);
   const compositionRef = useRef<EditorInputSnapshot | null>(null);
   const skipCompositionInputRef = useRef<{ chapterId: string; text: string } | null>(null);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.title = "KOHON";
+  }, [locale]);
 
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -285,6 +303,7 @@ export function App(): ReactNode {
 
   useEffect(() => {
     void window.kohon.appInfo().then(setAppInfo).catch(() => undefined);
+    void window.kohon.recentProjects().then(setRecentProjects).catch(() => undefined);
     void window.kohon.connectionStatus().then(setConnections).catch(() => undefined);
     void window.kohon.getUserSettings().then((loaded) => {
       setUserSettings(loaded);
@@ -296,19 +315,17 @@ export function App(): ReactNode {
     return () => { removeUpdateListener(); removeConnectionListener(); };
   }, []);
 
-  useEffect(() => {
-    if (provider !== "codex" || connections.codex.models.length === 0) return;
-    if (connections.codex.models.some((model) => model.id === modelId)) return;
-    const fallback = connections.codex.models.find((model) => model.id === "gpt-5.6-luna") ?? connections.codex.models.find((model) => model.isDefault) ?? connections.codex.models[0];
-    if (fallback === undefined) return;
-    setModelId(fallback.id);
-    void window.kohon.updateUserSettings({ ai: { codexModel: fallback.id } }).then(setUserSettings).catch(() => undefined);
-  }, [connections.codex.models, modelId, provider]);
-
   const manifestChapters = useMemo(() => [...(project?.manifest.chapters ?? [])].sort((a, b) => a.order - b.order), [project]);
   const activeEditorGroup = editorSession.groups.find((group) => group.id === editorSession.activeGroupId) ?? editorSession.groups[0];
   const activeChapterId = activeEditorGroup?.activeChapterId ?? null;
   const activeBuffer = activeChapterId === null ? undefined : editorBuffers.buffers[activeChapterId];
+  const currentLensResult = useMemo(() => lensResult === null ? null : {
+    ...lensResult,
+    findings: lensResult.findings.map((finding) => {
+      const buffer = finding.chapterId === null ? undefined : editorBuffers.buffers[finding.chapterId];
+      return buffer === undefined ? finding : refreshLensAnchor(finding, buffer.text);
+    })
+  }, [editorBuffers.buffers, lensResult]);
   const chapter: ChapterDocument | null = activeBuffer === undefined ? null : { chapter: activeBuffer.chapter, text: activeBuffer.text, version: activeBuffer.version };
   const text = activeBuffer?.text ?? "";
   const savedText = activeBuffer?.savedText ?? "";
@@ -326,31 +343,25 @@ export function App(): ReactNode {
   const canvasText = settings["canvasText"] === null || isHexColor(settings["canvasText"]) ? settings["canvasText"] : userSettings.editor.canvasText;
   const manuscriptPalette = resolveManuscriptPalette(theme, canvasBackground, canvasText);
   const findMatches = useMemo(() => findLiteralMatches(text, findQuery, caseSensitive), [caseSensitive, findQuery, text]);
-  const commandItems = useMemo<QuickAccessItem[]>(() => COMMAND_DEFINITIONS.map((command) => ({ id: command.id, label: command.label, description: command.category, shortcut: formatKeybinding(userSettings.keybindings[command.id]) })), [userSettings.keybindings]);
-  const chapterItems = useMemo<QuickAccessItem[]>(() => manifestChapters.map((item) => ({ id: item.id, label: item.title, description: `${String(item.order + 1).padStart(2, "0")} / 章・場面` })), [manifestChapters]);
+  const commandItems = useMemo<QuickAccessItem[]>(() => COMMAND_DEFINITIONS.map((command) => ({ id: command.id, label: commandLabel(command, locale), description: commandCategory(command, locale), shortcut: uiText(locale, formatKeybinding(userSettings.keybindings[command.id])) })), [locale, userSettings.keybindings]);
+  const chapterItems = useMemo<QuickAccessItem[]>(() => manifestChapters.map((item) => ({ id: item.id, label: item.title, description: `${String(item.order + 1).padStart(2, "0")} / ${t("章・場面")}` })), [manifestChapters, t]);
   const colorTheme = userSettings.appearance.colorTheme === "system" ? (systemDark ? "dark" : "default") : userSettings.appearance.colorTheme;
   const shellClass = `app-shell ui-${colorTheme} accent-${userSettings.appearance.accent} density-${userSettings.appearance.density}`;
 
+  const previousLocaleRef = useRef(locale);
   useEffect(() => {
-    if (writingMode !== "vertical-rl") return;
-    const frame = window.requestAnimationFrame(() => {
-      for (const editor of Object.values(editorRefs.current)) {
-        if (editor === undefined) continue;
-        editor.scrollLeft = editor.scrollWidth;
-        if (editor.parentElement !== null) editor.parentElement.scrollLeft = editor.parentElement.scrollWidth;
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeChapterId, editorSession.groups.length, editorWidth, viewport.width, writingMode]);
+    const previousLocale = previousLocaleRef.current;
+    if (previousLocale !== locale) {
+      setLensQuery((current) => current === uiText(previousLocale, DEFAULT_QUERY) ? uiText(locale, DEFAULT_QUERY) : current);
+      previousLocaleRef.current = locale;
+    }
+  }, [locale]);
 
   const scopeChapters = useMemo(() => {
     if (activeIndex < 0) return [];
-    if (scopeMode === "current") return [manifestChapters[activeIndex]!];
-    if (scopeMode === "through-current") return manifestChapters.slice(0, activeIndex + 1);
-    return manifestChapters;
-  }, [activeIndex, manifestChapters, scopeMode]);
+    return manifestChapters.slice(0, activeIndex + 1);
+  }, [activeIndex, manifestChapters]);
 
-  useEffect(() => { setScopeApproved(false); }, [role, scopeMode, activeChapterId, project?.root]);
 
   useEffect(() => { setFindMatchIndex((current) => findMatches.length === 0 ? -1 : Math.min(current, findMatches.length - 1)); }, [findMatches.length]);
 
@@ -450,7 +461,7 @@ export function App(): ReactNode {
     const currentDraft = noteDraftRef.current;
     if (document === null || currentDraft === null || noteDraftMatches(document, currentDraft)) return;
     const snapshot = { ...currentDraft, title: currentDraft.title.trim(), chapterIds: [...currentDraft.chapterIds] };
-    if (snapshot.title.length === 0) { setNoteSaveState("error"); setError("メモのタイトルを入力してください。"); throw new Error("メモのタイトルを入力してください。"); }
+    if (snapshot.title.length === 0) { const message = t("メモのタイトルを入力してください。"); setNoteSaveState("error"); setError(message); throw new Error(message); }
     setNoteSaveState("saving");
     const operation = noteSaveQueueRef.current.catch(() => undefined).then(async () => {
       try {
@@ -466,17 +477,18 @@ export function App(): ReactNode {
     });
     noteSaveQueueRef.current = operation;
     return operation;
-  }, [project]);
+  }, [project, t]);
 
   const saveNow = useCallback(async (): Promise<void> => {
     if (activeChapterId !== null) await saveChapterBuffer(activeChapterId);
   }, [activeChapterId, saveChapterBuffer]);
 
   const saveAllBuffers = useCallback(async (): Promise<void> => {
+    await story.flush();
     await Promise.all([saveActiveNote(), ...Object.keys(editorBuffersRef.current.buffers).map((chapterId) => saveChapterBuffer(chapterId))]);
     await saveQueueRef.current;
     await noteSaveQueueRef.current;
-  }, [saveActiveNote, saveChapterBuffer]);
+  }, [saveActiveNote, saveChapterBuffer, story.flush]);
 
   useEffect(() => {
     if (text === savedText) return;
@@ -504,8 +516,7 @@ export function App(): ReactNode {
     window.setTimeout(() => {
       const editor = editorRef.current;
       if (editor === null) return;
-      editor.focus();
-      editor.setSelectionRange(start, end);
+      revealManuscriptRange(editor, start, end);
     }, 60);
   }, []);
 
@@ -603,8 +614,8 @@ export function App(): ReactNode {
     const caret = Math.min(editorRef.current?.selectionStart ?? 0, result.text.length);
     commitActiveTextEdit(result.text, { start: caret, end: caret }, "find-replace");
     setFindMatchIndex(-1);
-    setNotice(`${result.count}件を置換しました。`);
-  }, [caseSensitive, commitActiveTextEdit, findQuery, isComposing, replacement, text]);
+    setNotice(locale === "en" ? `Replaced ${result.count} occurrence${result.count === 1 ? "" : "s"}.` : `${result.count}件を置換しました。`);
+  }, [caseSensitive, commitActiveTextEdit, findQuery, isComposing, locale, replacement, text]);
 
   const displayChapter = useCallback(async (root: string, next: ChapterDocument, view?: EditorTabState, range?: { start: number; end: number }, restoreView = true): Promise<void> => {
     let recovery: RecoveryDraftResult | null = null;
@@ -614,13 +625,13 @@ export function App(): ReactNode {
     const displayedText = recovery !== null && !recovery.conflict ? recovery.draft.text : next.text;
     if (restoreView) textRef.current = displayedText;
     setEditorBuffers((current) => loadBuffer(current, { chapter: next.chapter, text: displayedText, savedText: next.text, version: next.version, saveState: recovered ? "dirty" : "saved", recoveryConflict: recovery?.conflict ? recovery : null }));
-    if (recovered) setNotice(`「${next.chapter.title}」の未保存内容を復旧しました。`);
-    else if (recovery?.conflict) setNotice(`「${next.chapter.title}」に保存内容と競合する復旧ドラフトがあります。`);
+    if (recovered) setNotice(locale === "en" ? `Recovered unsaved changes for “${next.chapter.title}”.` : `「${next.chapter.title}」の未保存内容を復旧しました。`);
+    else if (recovery?.conflict) setNotice(locale === "en" ? `A recovery draft for “${next.chapter.title}” conflicts with saved content.` : `「${next.chapter.title}」に保存内容と競合する復旧ドラフトがあります。`);
     if (restoreView) {
       if (range !== undefined) focusRange(range.start, range.end);
       else restoreEditorView(recovered ? recovery?.draft : view);
     }
-  }, [focusRange, restoreEditorView]);
+  }, [focusRange, locale, restoreEditorView]);
 
   const reloadOpenBuffers = useCallback(async (root: string, sessionState: EditorSessionState): Promise<void> => {
     editorHistoryRef.current = createEditorHistory();
@@ -663,14 +674,15 @@ export function App(): ReactNode {
 
   const adoptProject = useCallback(async (next: ProjectSummary | null): Promise<void> => {
     if (next === null) return;
+    void window.kohon.recentProjects().then(setRecentProjects).catch(() => undefined);
     const restoredSession = await window.kohon.readEditorSession(next.root);
     let restoredReviews: ReviewLedgerEntry[] = [];
     let restoredNotes: NoteMeta[] = [];
     let reviewWarning: string | null = null;
     try { restoredReviews = await window.kohon.listReviewFindings(next.root); }
-    catch (cause) { reviewWarning = `指摘台帳を読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
+    catch (cause) { reviewWarning = `${t("指摘台帳を読み込めませんでした。本文はそのまま編集できます。")} ${errorText(cause)}`; }
     try { restoredNotes = await window.kohon.listNotes(next.root); }
-    catch (cause) { reviewWarning = `${reviewWarning === null ? "" : `${reviewWarning} `}作業メモを読み込めませんでした。本文はそのまま編集できます。${errorText(cause)}`; }
+    catch (cause) { reviewWarning = `${reviewWarning === null ? "" : `${reviewWarning} `}${t("作業メモを読み込めませんでした。本文はそのまま編集できます。")} ${errorText(cause)}`; }
     sessionHydratedRootRef.current = next.root;
     setProject(next);
     setEditorSession(restoredSession);
@@ -687,7 +699,6 @@ export function App(): ReactNode {
     setCheckpoints([]);
     setHistoryDiff(null);
     setError(reviewWarning);
-    setNotice(`「${next.manifest.title}」を開きました。`);
     const first = [...next.manifest.chapters].sort((a, b) => a.order - b.order)[0];
     if (first === undefined) {
       textRef.current = "";
@@ -695,7 +706,7 @@ export function App(): ReactNode {
       return;
     }
     await reloadOpenBuffers(next.root, restoredSession);
-  }, [reloadOpenBuffers]);
+  }, [reloadOpenBuffers, t]);
 
   const recordEditorView = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
     setEditorSession((current) => updateEditorTabView(current, groupId, chapterId, { selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd, scrollTop: editor.scrollTop, scrollLeft: editor.scrollLeft }));
@@ -757,31 +768,31 @@ export function App(): ReactNode {
     editorHistoryRef.current = clearTextHistory(editorHistoryRef.current, draft.chapterId);
     if (activeChapterId !== null) setEditorBuffers((current) => applyRecoveryDraft(current, activeChapterId));
     restoreEditorView(draft);
-    setNotice("復旧ドラフトを本文へ戻しました。自動保存します。");
-  }, [activeChapterId, recoveryConflict, restoreEditorView]);
+    setNotice(t("復旧ドラフトを本文へ戻しました。自動保存します。"));
+  }, [activeChapterId, recoveryConflict, restoreEditorView, t]);
 
   const discardRecoveryDraft = useCallback(async (): Promise<void> => {
     if (project === null || recoveryConflict === null) return;
     try {
       await window.kohon.clearRecoveryDraft(project.root, recoveryConflict.draft.chapterId);
       setEditorBuffers((current) => dismissRecoveryConflict(current, recoveryConflict.draft.chapterId));
-      setNotice("復旧ドラフトを破棄し、現在の保存内容を維持しました。");
+      setNotice(t("復旧ドラフトを破棄し、現在の保存内容を維持しました。"));
     } catch (cause) { setError(errorText(cause)); }
-  }, [project, recoveryConflict]);
+  }, [project, recoveryConflict, t]);
 
   const createProject = useCallback(async (): Promise<void> => {
     const title = await requestText({
-      title: "新しい作品を作る",
-      label: "作品名",
-      initialValue: "新しい小説",
-      confirmLabel: "保存場所を選ぶ"
+      title: t("新しい作品を作る"),
+      label: t("作品名"),
+      initialValue: t("新しい小説"),
+      confirmLabel: t("保存場所を選ぶ")
     });
     if (title === null || title.trim().length === 0) return;
     await saveAllBuffers(); clearMessages(); setBusy(true);
     try { await adoptProject(await window.kohon.createProject(title.trim())); }
     catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
-  }, [adoptProject, clearMessages, requestText, saveAllBuffers]);
+  }, [adoptProject, clearMessages, requestText, saveAllBuffers, t]);
 
   const openProject = useCallback(async (): Promise<void> => {
     await saveAllBuffers(); clearMessages(); setBusy(true);
@@ -790,17 +801,30 @@ export function App(): ReactNode {
     finally { setBusy(false); }
   }, [adoptProject, clearMessages, saveAllBuffers]);
 
+  const openRecentProject = useCallback(async (root: string): Promise<void> => {
+    clearMessages(); setBusy(true);
+    try { await saveAllBuffers(); await adoptProject(await window.kohon.openRecentProject(root)); }
+    catch (cause) { setError(`${errorText(cause)} ${t("保存先が変わった場合は「別の作品を開く」から選び直してください。")}`); }
+    finally { setBusy(false); }
+  }, [adoptProject, clearMessages, saveAllBuffers, t]);
+
   const exportProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.kohon.exportMarkdown(project.root); if (path !== null) setNotice(`Markdownを書き出しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.exportMarkdown(project.root); if (path !== null) setNotice(locale === "en" ? `Exported Markdown: ${path}` : `Markdownを書き出しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
-  }, [project, saveAllBuffers]);
+  }, [locale, project, saveAllBuffers]);
 
   const exportText = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.kohon.exportText(project.root); if (path !== null) setNotice(`TXTを書き出しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.exportText(project.root); if (path !== null) setNotice(locale === "en" ? `Exported TXT: ${path}` : `TXTを書き出しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
-  }, [project, saveAllBuffers]);
+  }, [locale, project, saveAllBuffers]);
+
+  const exportReviewBrief = useCallback(async (): Promise<void> => {
+    if (project === null) return;
+    try { await saveAllBuffers(); const path = await window.kohon.exportReviewBrief(project.root); if (path !== null) setNotice(locale === "en" ? `Exported review brief: ${path}` : `査読ブリーフを書き出しました: ${path}`); }
+    catch (cause) { setError(errorText(cause)); }
+  }, [locale, project, saveAllBuffers]);
 
   const refreshProject = useCallback(async (): Promise<ProjectSummary | null> => {
     if (project === null) return null;
@@ -813,15 +837,15 @@ export function App(): ReactNode {
     if (project === null) return;
     const ordinal = manifestChapters.filter((item) => (item.kind ?? "chapter") === kind).length + 1;
     const title = await requestText({
-      title: kind === "scene" ? "場面を追加" : "章を追加",
-      label: "タイトル",
-      initialValue: kind === "scene" ? defaultSceneTitle(ordinal) : defaultChapterTitle(ordinal),
-      confirmLabel: "追加する"
+      title: t(kind === "scene" ? "場面を追加" : "章を追加"),
+      label: t("タイトル"),
+      initialValue: kind === "scene" ? defaultSceneTitle(ordinal, locale) : defaultChapterTitle(ordinal, locale),
+      confirmLabel: t("追加する")
     });
     if (title === null || title.trim().length === 0) return;
     try { await saveNow(); const created = await window.kohon.createChapter(project.root, title.trim(), kind); await refreshProject(); await loadChapter(created.id); }
     catch (cause) { setError(errorText(cause)); }
-  }, [loadChapter, manifestChapters, project, refreshProject, requestText, saveNow]);
+  }, [loadChapter, locale, manifestChapters, project, refreshProject, requestText, saveNow, t]);
 
   const importDocuments = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -832,9 +856,9 @@ export function App(): ReactNode {
       setProject(imported.project);
       const firstId = imported.importedChapterIds[0];
       if (firstId !== undefined) await loadChapter(firstId);
-      setNotice(`${imported.importedChapterIds.length}件のファイルを取り込みました。`);
+      setNotice(locale === "en" ? `Imported ${imported.importedChapterIds.length} file${imported.importedChapterIds.length === 1 ? "" : "s"}.` : `${imported.importedChapterIds.length}件のファイルを取り込みました。`);
     } catch (cause) { setError(errorText(cause)); }
-  }, [loadChapter, project, saveAllBuffers]);
+  }, [loadChapter, locale, project, saveAllBuffers]);
 
   const moveChapterById = useCallback(async (chapterId: string, delta: -1 | 1): Promise<void> => {
     if (project === null) return;
@@ -890,7 +914,7 @@ export function App(): ReactNode {
 
   const createNote = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    const title = await requestText({ title: "作業メモを追加", label: "タイトル", initialValue: "新しいメモ", confirmLabel: "追加する" });
+    const title = await requestText({ title: t("作業メモを追加"), label: t("タイトル"), initialValue: t("新しいメモ"), confirmLabel: t("追加する") });
     if (title === null) return;
     try {
       await saveActiveNote();
@@ -899,7 +923,7 @@ export function App(): ReactNode {
       activeNoteRef.current = document; noteDraftRef.current = draft;
       setNotes((current) => [...current, document.note]); setActiveNote(document); setNoteDraft(draft); setNoteSaveState("saved");
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeChapterId, project, requestText, saveActiveNote]);
+  }, [activeChapterId, project, requestText, saveActiveNote, t]);
 
   const toggleCurrentChapterPin = useCallback((): void => {
     if (activeChapterId === null || noteDraftRef.current === null) return;
@@ -921,28 +945,28 @@ export function App(): ReactNode {
   const renameProject = useCallback(async (): Promise<void> => {
     if (project === null) return;
     const title = await requestText({
-      title: "作品名を変更",
-      label: "作品名",
+      title: t("作品名を変更"),
+      label: t("作品名"),
       initialValue: project.manifest.title,
-      confirmLabel: "変更する"
+      confirmLabel: t("変更する")
     });
     if (title === null || title.trim().length === 0 || title.trim() === project.manifest.title) return;
     try { setProject(await window.kohon.renameProject(project.root, title.trim())); }
     catch (cause) { setError(errorText(cause)); }
-  }, [project, requestText]);
+  }, [project, requestText, t]);
 
   const renameChapter = useCallback(async (): Promise<void> => {
     if (project === null || chapter === null) return;
     const title = await requestText({
-      title: "章・場面の名前を変更",
-      label: "タイトル",
+      title: t("章・場面の名前を変更"),
+      label: t("タイトル"),
       initialValue: chapter.chapter.title,
-      confirmLabel: "変更する"
+      confirmLabel: t("変更する")
     });
     if (title === null || title.trim().length === 0 || title.trim() === chapter.chapter.title) return;
     try { await window.kohon.renameChapter(project.root, chapter.chapter.id, title.trim()); const refreshed = await refreshProject(); const found = refreshed?.manifest.chapters.find((item) => item.id === chapter.chapter.id); if (found !== undefined) setEditorBuffers((current) => { const buffer = current.buffers[found.id]; return buffer === undefined ? current : loadBuffer(current, { chapter: found, text: buffer.text, savedText: buffer.savedText, version: buffer.version, saveState: buffer.saveState, recoveryConflict: buffer.recoveryConflict }); }); }
     catch (cause) { setError(errorText(cause)); }
-  }, [chapter, project, refreshProject, requestText]);
+  }, [chapter, project, refreshProject, requestText, t]);
 
   const saveChapterMetadata = useCallback(async (metadata: ChapterMetadata): Promise<void> => {
     if (project === null || activeChapterId === null) return;
@@ -954,17 +978,17 @@ export function App(): ReactNode {
         const buffer = current.buffers[found.id];
         return buffer === undefined ? current : loadBuffer(current, { chapter: found, text: buffer.text, savedText: buffer.savedText, version: buffer.version, saveState: buffer.saveState, recoveryConflict: buffer.recoveryConflict });
       });
-      setNotice("章・場面情報を保存しました。");
+      setNotice(t("章・場面情報を保存しました。"));
     } catch (cause) { setError(errorText(cause)); throw cause; }
-  }, [activeChapterId, project]);
+  }, [activeChapterId, project, t]);
 
   const deleteChapter = useCallback(async (): Promise<void> => {
     if (project === null || chapter === null) return;
-    if (manifestChapters.length <= 1) { setError("作品には少なくとも1つの章・場面が必要です。"); return; }
-    if (!window.confirm(`「${chapter.chapter.title}」を削除します。直前に保存点を作成します。よろしいですか？`)) return;
+    if (manifestChapters.length <= 1) { setError(t("作品には少なくとも1つの章・場面が必要です。")); return; }
+    if (!window.confirm(locale === "en" ? `Delete “${chapter.chapter.title}”? A checkpoint will be created first.` : `「${chapter.chapter.title}」を削除します。直前に保存点を作成します。よろしいですか？`)) return;
     try {
       await saveNow();
-      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」削除前`);
+      await window.kohon.createCheckpoint(project.root, locale === "en" ? `Before deleting “${chapter.chapter.title}”` : `「${chapter.chapter.title}」削除前`);
       const oldIndex = activeIndex;
       await window.kohon.deleteChapter(project.root, chapter.chapter.id);
       editorHistoryRef.current = clearTextHistory(editorHistoryRef.current, chapter.chapter.id);
@@ -979,19 +1003,19 @@ export function App(): ReactNode {
         await displayChapter(project.root, loaded, restoredSession.groups[0]?.tabs.find((item) => item.chapterId === next.id));
       }
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeIndex, chapter, displayChapter, manifestChapters.length, project, refreshProject, saveNow]);
+  }, [activeIndex, chapter, displayChapter, locale, manifestChapters.length, project, refreshProject, saveNow, t]);
 
   const splitCurrentChapter = useCallback(async (): Promise<void> => {
     if (project === null || chapter === null) return;
     const editor = editorRef.current;
     const offset = editor?.selectionStart ?? 0;
-    if (offset <= 0 || offset >= chapter.text.length) { setError("本文の途中へカーソルを置いてください。"); return; }
+    if (offset <= 0 || offset >= chapter.text.length) { setError(t("本文の途中へカーソルを置いてください。")); return; }
     const sceneNumber = manifestChapters.filter((item) => item.kind === "scene").length + 1;
-    const title = await requestText({ title: "カーソル位置で場面を分割", label: "新しい場面のタイトル", initialValue: defaultSceneTitle(sceneNumber), confirmLabel: "分割する" });
+    const title = await requestText({ title: t("カーソル位置で場面を分割"), label: t("新しい場面のタイトル"), initialValue: defaultSceneTitle(sceneNumber, locale), confirmLabel: t("分割する") });
     if (title === null) return;
     try {
       await saveAllBuffers();
-      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」場面分割前`);
+      await window.kohon.createCheckpoint(project.root, locale === "en" ? `Before splitting “${chapter.chapter.title}”` : `「${chapter.chapter.title}」場面分割前`);
       const captured = captureEditorView();
       const result = await window.kohon.splitChapter(project.root, chapter.chapter.id, offset, title);
       const nextSession = openEditorTab(captured, result.created.id, captured.activeGroupId);
@@ -1000,18 +1024,18 @@ export function App(): ReactNode {
       setNotes(await window.kohon.listNotes(project.root));
       setReviewFindings(await window.kohon.listReviewFindings(project.root));
       setCheckpoints(await window.kohon.listCheckpoints(project.root));
-      setNotice(`「${result.created.title}」へ分割しました。`);
+      setNotice(locale === "en" ? `Split into “${result.created.title}”.` : `「${result.created.title}」へ分割しました。`);
     } catch (cause) { setError(errorText(cause)); }
-  }, [captureEditorView, chapter, manifestChapters, project, reloadOpenBuffers, requestText, saveAllBuffers]);
+  }, [captureEditorView, chapter, locale, manifestChapters, project, reloadOpenBuffers, requestText, saveAllBuffers, t]);
 
   const mergeCurrentChapterIntoPrevious = useCallback(async (): Promise<void> => {
     if (project === null || chapter === null || activeIndex <= 0) return;
     const target = manifestChapters[activeIndex - 1]!;
-    if (!window.confirm(`「${chapter.chapter.title}」を前の「${target.title}」へ結合します。実行前の保存点は自動で残します。`)) return;
+    if (!window.confirm(locale === "en" ? `Merge “${chapter.chapter.title}” into the previous “${target.title}”? A checkpoint will be created first.` : `「${chapter.chapter.title}」を前の「${target.title}」へ結合します。実行前の保存点は自動で残します。`)) return;
     try {
       await saveAllBuffers();
       const targetBefore = await window.kohon.readChapter(project.root, target.id);
-      await window.kohon.createCheckpoint(project.root, `「${chapter.chapter.title}」結合前`);
+      await window.kohon.createCheckpoint(project.root, locale === "en" ? `Before merging “${chapter.chapter.title}”` : `「${chapter.chapter.title}」結合前`);
       let nextSession = captureEditorView();
       const sourceGroupId = nextSession.activeGroupId;
       const result = await window.kohon.mergeChapterIntoPrevious(project.root, chapter.chapter.id);
@@ -1023,9 +1047,9 @@ export function App(): ReactNode {
       setNotes(await window.kohon.listNotes(project.root));
       setReviewFindings(await window.kohon.listReviewFindings(project.root));
       setCheckpoints(await window.kohon.listCheckpoints(project.root));
-      setNotice(`「${result.target.title}」へ結合しました。`);
+      setNotice(locale === "en" ? `Merged into “${result.target.title}”.` : `「${result.target.title}」へ結合しました。`);
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeIndex, captureEditorView, chapter, focusRange, manifestChapters, project, reloadOpenBuffers, saveAllBuffers]);
+  }, [activeIndex, captureEditorView, chapter, focusRange, locale, manifestChapters, project, reloadOpenBuffers, saveAllBuffers]);
 
   const runSearch = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0) { setSearchHits([]); return; }
@@ -1036,15 +1060,15 @@ export function App(): ReactNode {
   const replaceAcrossProject = useCallback(async (): Promise<void> => {
     if (project === null || searchQuery.trim().length === 0 || searchHits.length === 0 || searchRun?.query !== searchQuery.trim() || searchRun.caseSensitive !== searchCaseSensitive) return;
     const chapterCount = new Set(searchHits.map((hit) => hit.chapterId)).size;
-    if (!window.confirm(`${chapterCount}章の${searchHits.length}件を置換します。実行前の保存点は自動で作成されます。よろしいですか？`)) return;
+    if (!window.confirm(locale === "en" ? `Replace ${searchHits.length} occurrence${searchHits.length === 1 ? "" : "s"} across ${chapterCount} chapter${chapterCount === 1 ? "" : "s"}? A checkpoint will be created first.` : `${chapterCount}章の${searchHits.length}件を置換します。実行前の保存点は自動で作成されます。よろしいですか？`)) return;
     try {
       await saveAllBuffers();
       const result = await window.kohon.replaceProjectText(project.root, searchQuery.trim(), searchReplacement, searchCaseSensitive);
       await reloadOpenBuffers(project.root, editorSession);
       setSearchHits(await window.kohon.search(project.root, searchQuery.trim(), searchCaseSensitive));
-      setNotice(`${result.chapterCount}章の${result.count}件を置換しました。`);
+      setNotice(locale === "en" ? `Replaced ${result.count} occurrence${result.count === 1 ? "" : "s"} across ${result.chapterCount} chapter${result.chapterCount === 1 ? "" : "s"}.` : `${result.chapterCount}章の${result.count}件を置換しました。`);
     } catch (cause) { setError(errorText(cause)); }
-  }, [editorSession, project, reloadOpenBuffers, saveAllBuffers, searchCaseSensitive, searchHits, searchQuery, searchReplacement, searchRun]);
+  }, [editorSession, locale, project, reloadOpenBuffers, saveAllBuffers, searchCaseSensitive, searchHits, searchQuery, searchReplacement, searchRun]);
 
   const loadCheckpoints = useCallback(async (): Promise<void> => {
     if (project === null) return;
@@ -1053,22 +1077,22 @@ export function App(): ReactNode {
   }, [project]);
 
   useEffect(() => {
-    const historySlot = slotOf(userSettings.layout, "history");
-    if (historySlot !== null && !userSettings.layout.zenMode && userSettings.layout.slots[historySlot].visible && userSettings.layout.slots[historySlot].activeView === "history") void loadCheckpoints();
+    const historyNode = findViewNode(userSettings.layout, "history");
+    if (historyNode !== null && !userSettings.layout.zenMode && historyNode.visible && historyNode.activeView === "history") void loadCheckpoints();
   }, [loadCheckpoints, userSettings.layout]);
 
   const createCheckpoint = useCallback(async (): Promise<void> => {
     if (project === null) return;
     const subject = await requestText({
-      title: "保存点を作る",
-      label: "保存点の名前",
-      initialValue: "ここまでの改稿",
-      confirmLabel: "保存点を作る"
+      title: t("保存点を作る"),
+      label: t("保存点の名前"),
+      initialValue: t("ここまでの改稿"),
+      confirmLabel: t("保存点を作る")
     });
     if (subject === null || subject.trim().length === 0) return;
-    try { await saveAllBuffers(); await window.kohon.createCheckpoint(project.root, subject.trim()); await loadCheckpoints(); setNotice("保存点を作成しました。"); }
+    try { await saveAllBuffers(); await window.kohon.createCheckpoint(project.root, subject.trim()); await loadCheckpoints(); setNotice(t("保存点を作成しました。")); }
     catch (cause) { setError(errorText(cause)); }
-  }, [loadCheckpoints, project, requestText, saveAllBuffers]);
+  }, [loadCheckpoints, project, requestText, saveAllBuffers, t]);
 
   const compareCurrentCheckpoint = useCallback(async (entry: CheckpointEntry): Promise<void> => {
     if (project === null) return;
@@ -1083,12 +1107,13 @@ export function App(): ReactNode {
   }, [project]);
 
   const restoreCheckpoint = useCallback(async (entry: CheckpointEntry): Promise<void> => {
-    if (project === null || !window.confirm(`保存点「${entry.subject}」へ戻します。現在の状態は復元前の保存点として残します。`)) return;
+    if (project === null || !window.confirm(locale === "en" ? `Restore checkpoint “${entry.subject}”? The current state will be kept as a checkpoint.` : `保存点「${entry.subject}」へ戻します。現在の状態は復元前の保存点として残します。`)) return;
     try {
       await saveAllBuffers();
       const restored = await window.kohon.restoreCheckpoint(project.root, entry.commit);
       editorHistoryRef.current = createEditorHistory();
       setProject(restored);
+      await story.reload();
       setEditorBuffers(createEditorBuffers());
       const desired = restored.manifest.chapters.find((item) => item.id === activeChapterId) ?? restored.manifest.chapters[0];
       if (desired !== undefined) {
@@ -1104,12 +1129,12 @@ export function App(): ReactNode {
         }
       }
       await loadCheckpoints();
-      setNotice("保存点から復元しました。");
+      setNotice(t("保存点から復元しました。"));
     } catch (cause) { setError(errorText(cause)); }
-  }, [activeChapterId, displayChapter, loadCheckpoints, project, saveAllBuffers]);
+  }, [activeChapterId, displayChapter, loadCheckpoints, locale, project, saveAllBuffers, story.reload, t]);
 
   const restoreCheckpointChapter = useCallback(async (commit: string, chapterId: string, title: string): Promise<void> => {
-    if (project === null || !window.confirm(`「${title}」だけを選択した保存点へ戻します。他の章は変更しません。復元前の全体状態も自動で残します。`)) return;
+    if (project === null || !window.confirm(locale === "en" ? `Restore only “${title}” from the selected checkpoint? Other chapters will not change, and the current project will be checkpointed first.` : `「${title}」だけを選択した保存点へ戻します。他の章は変更しません。復元前の全体状態も自動で残します。`)) return;
     try {
       await saveAllBuffers();
       const restored = await window.kohon.restoreCheckpointChapter(project.root, commit, chapterId);
@@ -1118,15 +1143,15 @@ export function App(): ReactNode {
       setReviewFindings(await window.kohon.listReviewFindings(restored.root));
       setCheckpoints(await window.kohon.listCheckpoints(restored.root));
       setHistoryDiff(await window.kohon.compareCurrentToCheckpoint(restored.root, commit));
-      setNotice(`「${title}」だけを保存点から復元しました。`);
+      setNotice(locale === "en" ? `Restored only “${title}” from the checkpoint.` : `「${title}」だけを保存点から復元しました。`);
     } catch (cause) { setError(errorText(cause)); }
-  }, [editorSession, project, reloadOpenBuffers, saveAllBuffers]);
+  }, [editorSession, locale, project, reloadOpenBuffers, saveAllBuffers]);
 
   const createVariation = useCallback(async (): Promise<void> => {
     if (project === null) return;
-    try { await saveAllBuffers(); const path = await window.kohon.createVariation(project.root); if (path !== null) setNotice(`別案を作成しました: ${path}`); }
+    try { await saveAllBuffers(); const path = await window.kohon.createVariation(project.root); if (path !== null) setNotice(locale === "en" ? `Created variation: ${path}` : `別案を作成しました: ${path}`); }
     catch (cause) { setError(errorText(cause)); }
-  }, [project, saveAllBuffers]);
+  }, [locale, project, saveAllBuffers]);
 
   const updateProjectSettings = useCallback(async (patch: ProjectSettings): Promise<void> => {
     if (project === null) return;
@@ -1144,9 +1169,11 @@ export function App(): ReactNode {
     try {
       const next = await window.kohon.updateUserSettings(patch);
       setUserSettings(next);
-      if (patch.ai?.defaultProvider !== undefined) setProvider(next.ai.defaultProvider);
-      if (patch.ai?.codexModel !== undefined) setModelId(next.ai.codexModel);
-      else if (patch.ai?.openaiModel !== undefined) setModelId(next.ai.openaiModel);
+      if (patch.ai?.defaultProvider !== undefined) {
+        setProvider(next.ai.defaultProvider);
+        setModelId(next.ai.defaultProvider === "codex" ? next.ai.codexModel : next.ai.defaultProvider === "openai" ? next.ai.openaiModel : "offline-mock-v0.1");
+      } else if (patch.ai?.codexModel !== undefined && next.ai.defaultProvider === "codex") setModelId(next.ai.codexModel);
+      else if (patch.ai?.openaiModel !== undefined && next.ai.defaultProvider === "openai") setModelId(next.ai.openaiModel);
     } catch (cause) { setError(errorText(cause)); throw cause; }
   }, []);
 
@@ -1161,56 +1188,44 @@ export function App(): ReactNode {
 
   const revealView = useCallback((view: ViewId): void => {
     setSettingsOpen(false);
-    const slot = slotOf(userSettings.layout, view);
-    if (slot === null) return;
-    commitLayout({
-      ...userSettings.layout,
-      zenMode: false,
-      slots: {
-        ...userSettings.layout.slots,
-        [slot]: { ...userSettings.layout.slots[slot], visible: true, activeView: view }
-      }
-    });
+    commitLayout({ ...revealDockView(userSettings.layout, view), zenMode: false });
   }, [commitLayout, userSettings.layout]);
 
   const toggleView = useCallback((view: ViewId): void => {
-    const slot = slotOf(userSettings.layout, view);
-    if (slot === null) return;
-    const slotState = userSettings.layout.slots[slot];
-    if (userSettings.layout.zenMode || !slotState.visible || slotState.activeView !== view) {
+    const node = findViewNode(userSettings.layout, view);
+    if (node === null) return;
+    if (userSettings.layout.zenMode || !node.visible || node.activeView !== view) {
       revealView(view);
       return;
     }
-    commitLayout({
-      ...userSettings.layout,
-      slots: { ...userSettings.layout.slots, [slot]: { ...slotState, visible: false } }
-    });
+    commitLayout(toggleViewVisibility(userSettings.layout, view));
   }, [commitLayout, revealView, userSettings.layout]);
 
-  const beginPaneResize = useCallback((slot: SlotId, event: ReactPointerEvent<HTMLDivElement>): void => {
+  const beginPaneResize = useCallback((splitId: string, leftIndex: number, rightIndex: number, event: ReactPointerEvent<HTMLDivElement>): void => {
     event.preventDefault();
     const owner = event.currentTarget;
     const pointerId = event.pointerId;
     const layout = userSettings.layout;
+    const split = findDockNode(layout.root, splitId);
+    if (split?.type !== "split" || leftIndex < 0 || rightIndex <= leftIndex || rightIndex >= split.children.length) return;
     const startX = event.clientX;
     const startY = event.clientY;
-    const startValue = layout.slots[slot].size;
-    let latest = startValue;
+    const startSizes = [...split.sizes];
+    const startLeft = startSizes[leftIndex] ?? 0.5;
+    const startRight = startSizes[rightIndex] ?? 0.5;
+    let latestSizes = startSizes;
     let finished = false;
     const onMove = (moveEvent: PointerEvent): void => {
-      if (slot === "bottom") latest = Math.max(LAYOUT_LIMITS.bottom.min, Math.min(LAYOUT_LIMITS.bottom.max, startValue - (moveEvent.clientY - startY)));
-      else {
-        const direction = sideOf(slot, layout) === "left" ? 1 : -1;
-        const limits = LAYOUT_LIMITS[slot];
-        latest = Math.max(limits.min, Math.min(limits.max, startValue + (moveEvent.clientX - startX) * direction));
-      }
-      setUserSettings((current) => ({
-        ...current,
-        layout: {
-          ...current.layout,
-          slots: { ...current.layout.slots, [slot]: { ...current.layout.slots[slot], size: latest } }
-        }
-      }));
+      const delta = split.direction === "horizontal" ? moveEvent.clientX - startX : moveEvent.clientY - startY;
+      const rect = owner.parentElement?.getBoundingClientRect();
+      const total = rect === undefined ? 1 : split.direction === "horizontal" ? rect.width : rect.height;
+      const fraction = total > 0 ? delta / total : 0;
+      const left = Math.max(0.08, Math.min(startLeft + startRight - 0.08, startLeft + fraction));
+      const pairTotal = startLeft + startRight;
+      latestSizes = [...startSizes];
+      latestSizes[leftIndex] = left;
+      latestSizes[rightIndex] = Math.max(0.08, pairTotal - left);
+      setUserSettings((current) => ({ ...current, layout: setSplitSizes(current.layout, splitId, latestSizes) }));
     };
     const finish = (commit: boolean): void => {
       if (finished) return;
@@ -1222,8 +1237,8 @@ export function App(): ReactNode {
       owner.removeEventListener("lostpointercapture", onLostCapture);
       document.body.classList.remove("is-resizing");
       if (owner.hasPointerCapture?.(pointerId)) owner.releasePointerCapture(pointerId);
-      if (commit) void updateUserSettings({ layout: { slots: { [slot]: { size: latest } } } });
-      else setUserSettings((current) => ({ ...current, layout: { ...current.layout, slots: { ...current.layout.slots, [slot]: { ...current.layout.slots[slot], size: startValue } } } }));
+      if (commit) void updateUserSettings({ layout: setSplitSizes(layout, splitId, latestSizes) });
+      else setUserSettings((current) => ({ ...current, layout: setSplitSizes(current.layout, splitId, startSizes) }));
     };
     const onUp = (): void => finish(true);
     const onCancel = (): void => finish(false);
@@ -1238,55 +1253,41 @@ export function App(): ReactNode {
     owner.addEventListener("lostpointercapture", onLostCapture);
   }, [updateUserSettings, userSettings.layout]);
 
-  const resizePaneFromKeyboard = useCallback((slot: SlotId, event: ReactKeyboardEvent<HTMLDivElement>): void => {
+  const resizePaneFromKeyboard = useCallback((splitId: string, leftIndex: number, rightIndex: number, event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const layout = userSettings.layout;
-    const limits = LAYOUT_LIMITS[slot];
-    const current = layout.slots[slot].size;
-    let next: number | null = null;
-
-    if (event.key === "Home") next = limits.min;
-    else if (event.key === "End") next = limits.max;
-    else if (slot === "bottom" && (event.key === "ArrowUp" || event.key === "ArrowDown")) next = current + (event.key === "ArrowUp" ? 10 : -10);
-    else if (slot !== "bottom" && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-      const growingDirection = sideOf(slot, layout) === "left" ? "ArrowRight" : "ArrowLeft";
-      next = current + (event.key === growingDirection ? 10 : -10);
-    }
-    if (next === null) return;
-
+    const split = findDockNode(layout.root, splitId);
+    if (split?.type !== "split" || leftIndex < 0 || rightIndex <= leftIndex || rightIndex >= split.children.length) return;
+    const positive = split.direction === "horizontal" ? "ArrowRight" : "ArrowDown";
+    const negative = split.direction === "horizontal" ? "ArrowLeft" : "ArrowUp";
+    if (event.key !== positive && event.key !== negative && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
-    const size = Math.max(limits.min, Math.min(limits.max, next));
-    commitLayout({
-      ...layout,
-      slots: { ...layout.slots, [slot]: { ...layout.slots[slot], size } }
-    }, `パネルのサイズを${Math.round(size)}ピクセルに変更しました`);
-  }, [commitLayout, userSettings.layout]);
+    const current = split.sizes[leftIndex] ?? 0.5;
+    const pairTotal = current + (split.sizes[rightIndex] ?? 0.5);
+    const next = event.key === "Home" ? 0.08 : event.key === "End" ? pairTotal - 0.08 : current + (event.key === positive ? 0.04 : -0.04);
+    const left = Math.max(0.08, Math.min(pairTotal - 0.08, next));
+    const values = [...split.sizes]; values[leftIndex] = left; values[rightIndex] = pairTotal - left;
+    commitLayout(setSplitSizes(layout, splitId, values), locale === "en" ? "Panel resized" : "パネルのサイズを変更しました");
+  }, [commitLayout, locale, userSettings.layout]);
 
   const detectDropTarget = useCallback((x: number, y: number): DropTarget => {
     const element = document.elementFromPoint(x, y) as HTMLElement | null;
+    const nodeElement = element?.closest<HTMLElement>("[data-dock-node-id]");
+    if (nodeElement === null || nodeElement === undefined) return { kind: "reject" };
+    const nodeId = nodeElement.dataset["dockNodeId"];
+    if (nodeId === undefined) return { kind: "reject" };
     const exactTab = element?.closest<HTMLElement>("[data-view-tab]");
-    if (exactTab !== null && exactTab !== undefined) {
-      const slotElement = exactTab.closest<HTMLElement>("[data-slot-id]");
-      if (slotElement !== null) {
-        const slot = slotElement.dataset["slotId"] as SlotId;
-        const tabs = [...slotElement.querySelectorAll<HTMLElement>("[data-view-tab]")];
-        const index = tabs.filter((tab) => x > tab.getBoundingClientRect().left + tab.getBoundingClientRect().width / 2).length;
-        return { kind: "slot-tab", slot, index };
-      }
-    }
-    const workspace = workspaceRef.current?.getBoundingClientRect();
-    if (workspace === undefined) return { kind: "reject" };
-    if (x <= workspace.left + 92) return { kind: "side-edge", side: "left" };
-    if (x >= workspace.right - 92) return { kind: "side-edge", side: "right" };
-    const slotElement = element?.closest<HTMLElement>("[data-slot-id]");
-    if (slotElement !== null && slotElement !== undefined) {
-      const slot = slotElement.dataset["slotId"] as SlotId;
-      const tabs = [...slotElement.querySelectorAll<HTMLElement>("[data-view-tab]")];
+    if (exactTab !== null && exactTab !== undefined && nodeElement.dataset["dockNodeType"] === "tabs") {
+      const tabs = [...nodeElement.querySelectorAll<HTMLElement>("[data-view-tab]")];
       const index = tabs.filter((tab) => x > tab.getBoundingClientRect().left + tab.getBoundingClientRect().width / 2).length;
-      return { kind: "slot-tab", slot, index };
+      return { kind: "dock-zone", nodeId, zone: "center", index };
     }
-    const editor = workspaceRef.current?.querySelector<HTMLElement>("[data-editor-pane]")?.getBoundingClientRect();
-    if (editor !== undefined && x >= editor.left && x <= editor.right && y >= workspace.bottom - 76) return { kind: "bottom-edge" };
-    return { kind: "reject" };
+    const rect = nodeElement.getBoundingClientRect();
+    const nx = (x - rect.left) / Math.max(1, rect.width);
+    const ny = (y - rect.top) / Math.max(1, rect.height);
+    const edge = Math.min(0.28, Math.max(0.16, 140 / Math.max(rect.width, rect.height)));
+    const zone: DockZone = nx < edge ? "left" : nx > 1 - edge ? "right" : ny < edge ? "top" : ny > 1 - edge ? "bottom" : "center";
+    if (zone === "center" && nodeElement.dataset["dockNodeType"] === "editor") return { kind: "reject" };
+    return { kind: "dock-zone", nodeId, zone };
   }, []);
 
   const beginDockDrag = useCallback((view: ViewId, event: ReactPointerEvent<HTMLElement>): void => {
@@ -1305,7 +1306,7 @@ export function App(): ReactNode {
         document.body.classList.remove("is-resizing");
         document.body.classList.add("is-docking");
       }
-      const next: DockDragState = { view, x: moveEvent.clientX, y: moveEvent.clientY, target: detectDropTarget(moveEvent.clientX, moveEvent.clientY) };
+      const next: DockDragState = { view, target: detectDropTarget(moveEvent.clientX, moveEvent.clientY) };
       dockSessionRef.current = next;
       setDockDrag(next);
     };
@@ -1322,9 +1323,9 @@ export function App(): ReactNode {
       const session = dockSessionRef.current;
       dockSessionRef.current = null;
       setDockDrag(null);
-      if (apply && session !== null && session.target.kind !== "reject") {
-        const next = applyDropTarget(userSettings.layout, session.view, session.target);
-        commitLayout(next, `${VIEW_LABELS[session.view]}を移動しました`);
+      if (apply && session !== null && session.target.kind === "dock-zone") {
+        const next = dockView(userSettings.layout, session.view, session.target.nodeId, session.target.zone, session.target.index);
+        commitLayout(next, locale === "en" ? `Moved ${viewLabel(session.view)}` : `${VIEW_LABELS[session.view]}を移動しました`);
       }
       if (started) window.setTimeout(() => { suppressDockClickRef.current = false; }, 0);
     };
@@ -1337,7 +1338,7 @@ export function App(): ReactNode {
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("blur", onCancel);
     owner.addEventListener("lostpointercapture", onLostCapture);
-  }, [commitLayout, detectDropTarget, isComposing, userSettings.layout]);
+  }, [commitLayout, detectDropTarget, isComposing, locale, userSettings.layout, viewLabel]);
 
   const openViewMenu = useCallback((view: ViewId, x: number, y: number): void => {
     setViewMenu({ view, x: Math.min(x, window.innerWidth - 220), y: Math.min(y, window.innerHeight - 270) });
@@ -1416,7 +1417,7 @@ export function App(): ReactNode {
   }, []);
 
   const invokeLens = useCallback(async (): Promise<void> => {
-    if (project === null || scopeChapters.length === 0 || !scopeApproved) return;
+    if (project === null || scopeChapters.length === 0 || lensBusy) return;
     const query = lensQuery.trim();
     if (query.length === 0) return;
     setLensBusy(true); setError(null); setNotice(null);
@@ -1424,24 +1425,33 @@ export function App(): ReactNode {
       await saveAllBuffers();
       const userMessage: LensMessage = { sender: "author", text: query, createdAt: new Date().toISOString() };
       const conversation = [...threads[role], userMessage];
-      const result = await window.kohon.runLens({ root: project.root, role, query, scope: scopeMode, cutoffChapterId: scopeMode === "all" ? null : activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
+      const result = await window.kohon.runLens({ root: project.root, role, query, scope: "through-current", cutoffChapterId: activeChapterId, approvedChapterIds: scopeChapters.map((item) => item.id), provider, modelId: provider === "mock" ? "offline-mock-v0.1" : modelId, conversation });
       setLensResult(result);
-      if (result.ledgerStored === false) setError(`AIの回答は表示できますが、指摘台帳へ保存できませんでした。${result.ledgerMessage ?? ""}`);
+      if (result.ledgerStored === false) setError(`${t("AIの回答は表示できますが、指摘台帳へ保存できませんでした。")} ${result.ledgerMessage ?? ""}`);
       else {
         try { setReviewFindings(await window.kohon.listReviewFindings(project.root)); }
-        catch (cause) { setError(`AIの回答は表示できますが、指摘台帳を読み込めませんでした。${errorText(cause)}`); }
+        catch (cause) { setError(`${t("AIの回答は表示できますが、指摘台帳を読み込めませんでした。")} ${errorText(cause)}`); }
       }
       const responseText = [result.summary, ...result.findings.map((finding) => `・${finding.title}: ${finding.observation}`)].join("\n");
       setThreads((current) => ({ ...current, [role]: [...conversation, { sender: "lens", text: responseText, createdAt: new Date().toISOString() }] }));
       setLensQuery("");
     } catch (cause) { setError(errorText(cause)); }
     finally { setLensBusy(false); }
-  }, [activeChapterId, lensQuery, modelId, project, provider, role, saveAllBuffers, scopeApproved, scopeChapters, scopeMode, threads]);
+  }, [activeChapterId, lensBusy, lensQuery, modelId, project, provider, role, saveAllBuffers, scopeChapters, t, threads]);
 
   const jumpToFinding = useCallback(async (finding: LensFinding): Promise<void> => {
-    if (finding.chapterId === null || finding.startUtf16 === null || finding.endUtf16 === null || finding.anchorStatus !== "attached") return;
-    await loadChapter(finding.chapterId, { start: finding.startUtf16, end: finding.endUtf16 });
-  }, [loadChapter]);
+    if (project === null || finding.chapterId === null) return;
+    try {
+      await saveAllBuffers();
+      const document = await window.kohon.readChapter(project.root, finding.chapterId);
+      const current = refreshLensAnchor(finding, editorBuffersRef.current.buffers[finding.chapterId]?.text ?? document.text);
+      if (current.startUtf16 === null || current.endUtf16 === null || current.anchorStatus !== "attached") {
+        setNotice(t(current.anchorStatus === "ambiguous" ? "現在の本文に引用が複数あります。検索で場所を確認してください。" : "この引用は現在の本文にありません。推敲後の本文を確認してください。"));
+        return;
+      }
+      await loadChapter(finding.chapterId, { start: current.startUtf16, end: current.endUtf16 });
+    } catch (cause) { setError(errorText(cause)); }
+  }, [loadChapter, project, saveAllBuffers, t]);
 
   const jumpToReviewFinding = useCallback(async (finding: ReviewLedgerEntry): Promise<void> => {
     if (finding.anchorStatus !== "attached" || finding.anchor.offset === null) return;
@@ -1450,8 +1460,8 @@ export function App(): ReactNode {
 
   useEffect(() => {
     if (project === null || saveState !== "saved") return;
-    const lensSlot = slotOf(userSettings.layout, "lens");
-    if (lensSlot === null || userSettings.layout.zenMode || !userSettings.layout.slots[lensSlot].visible || userSettings.layout.slots[lensSlot].activeView !== "lens") return;
+    const lensNode = findViewNode(userSettings.layout, "lens");
+    if (lensNode === null || userSettings.layout.zenMode || !lensNode.visible || lensNode.activeView !== "lens") return;
     void window.kohon.listReviewFindings(project.root).then(setReviewFindings).catch((cause) => setError(errorText(cause)));
   }, [activeBuffer?.version, project, saveState, userSettings.layout]);
 
@@ -1459,6 +1469,18 @@ export function App(): ReactNode {
     if (project === null) return;
     try { setReviewFindings(await window.kohon.setReviewFindingStatus(project.root, id, status)); }
     catch (cause) { setError(errorText(cause)); }
+  }, [project]);
+
+  const saveReviewNote = useCallback(async (id: string, value: string): Promise<void> => {
+    if (project === null) throw new Error("Project is closed");
+    const root = project.root;
+    const entries = await window.kohon.setReviewAuthorNote(root, id, value);
+    if (currentProjectRoot.current === root) setReviewFindings(entries);
+    const key = `${root}\u0000${id}`;
+    setReviewNoteDrafts(current => {
+      if (current[key] !== value) return current;
+      const next = { ...current }; delete next[key]; return next;
+    });
   }, [project]);
 
   const recheckReview = useCallback(async (id: string): Promise<void> => {
@@ -1479,28 +1501,28 @@ export function App(): ReactNode {
   const applyJapaneseInput = useCallback((transform: (input: TextareaSelection) => JapaneseInputResult, requireSelection = false): void => {
     const editor = editorRef.current;
     if (isComposing || activeChapterId === null || editor === null) return;
-    if (requireSelection && editor.selectionStart === editor.selectionEnd) { setError("本文の対象範囲を選択してください。"); return; }
+    if (requireSelection && editor.selectionStart === editor.selectionEnd) { setError(t("本文の対象範囲を選択してください。")); return; }
     const result = transform({ text: editor.value, selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd });
     commitActiveTextEdit(result.nextText, { start: result.nextSelectionStart, end: result.nextSelectionEnd }, "japanese-helper");
-  }, [activeChapterId, commitActiveTextEdit, isComposing]);
+  }, [activeChapterId, commitActiveTextEdit, isComposing, t]);
 
   const insertRuby = useCallback(async (): Promise<void> => {
     const editor = editorRef.current;
     if (isComposing || editor === null) return;
-    if (editor.selectionStart === editor.selectionEnd) { setError("ルビを付ける本文を選択してください。"); return; }
-    const reading = await requestText({ title: "ルビを付ける", label: "読み", initialValue: "", confirmLabel: "ルビを付ける" });
+    if (editor.selectionStart === editor.selectionEnd) { setError(t("ルビを付ける本文を選択してください。")); return; }
+    const reading = await requestText({ title: t("ルビを付ける"), label: t("読み"), initialValue: "", confirmLabel: t("ルビを付ける") });
     if (reading === null) return;
-    if (/[\r\n《》]/u.test(reading)) { setError("読みには改行や《 》を使えません。"); return; }
+    if (/[\r\n《》]/u.test(reading)) { setError(t("読みには改行や《 》を使えません。")); return; }
     applyJapaneseInput((input) => wrapSelectionWithRuby(input, reading.trim()), true);
-  }, [applyJapaneseInput, isComposing, requestText]);
+  }, [applyJapaneseInput, isComposing, requestText, t]);
 
   const annotateTateChuYoko = useCallback((): void => {
     const editor = editorRef.current;
     if (isComposing || editor === null) return;
     const selected = editor.value.slice(editor.selectionStart, editor.selectionEnd);
-    if (!isTateChuYokoCandidate(selected)) { setError("縦中横にする半角英数字を2〜3文字選択してください。"); return; }
+    if (!isTateChuYokoCandidate(selected)) { setError(t("縦中横にする半角英数字を2〜3文字選択してください。")); return; }
     applyJapaneseInput(annotateSelectionAsTateChuYoko, true);
-  }, [applyJapaneseInput, isComposing]);
+  }, [applyJapaneseInput, isComposing, t]);
 
   const moveActiveEditorTab = useCallback((delta: -1 | 1): void => {
     setEditorSession((current) => {
@@ -1529,13 +1551,18 @@ export function App(): ReactNode {
     setQuickAccessMode(null);
     if (action === "file.new") void createProject();
     else if (action === "file.open") void openProject();
-    else if (action === "file.save") void saveAllBuffers();
+    else if (action === "file.save") void saveAllBuffers().catch(cause => setError(errorText(cause)));
+    else if (action === "file.renameProject") void renameProject();
     else if (action === "workbench.commandPalette") openQuickAccess("commands");
     else if (action === "workbench.quickOpen") openQuickAccess("chapters");
     else if (action === "editor.find") openEditorFind(false);
     else if (action === "editor.replace") openEditorFind(true);
-    else if (action === "editor.undo") stepEditorHistory("undo");
-    else if (action === "editor.redo") stepEditorHistory("redo");
+    else if (action === "editor.undo") {
+      if (document.activeElement?.closest(".story-map")) story.undo(); else stepEditorHistory("undo");
+    }
+    else if (action === "editor.redo") {
+      if (document.activeElement?.closest(".story-map")) story.redo(); else stepEditorHistory("redo");
+    }
     else if (action === "editor.splitRight") splitActiveEditor("right");
     else if (action === "editor.splitDown") splitActiveEditor("down");
     else if (action === "editor.closeGroup") void closeActiveEditorGroup();
@@ -1564,11 +1591,12 @@ export function App(): ReactNode {
     else if (action === "view.outline") revealView("outline");
     else if (action === "view.search") revealView("search");
     else if (action === "view.lens") revealView("lens");
+    else if (action === "view.story") revealView("story");
     else if (action === "view.history") revealView("history");
     else if (action === "view.zen") commitLayout({ ...userSettings.layout, zenMode: !userSettings.layout.zenMode });
-    else if (action === "layout.reset") commitLayout(defaultLayout(), "レイアウトを既定へ戻しました");
+    else if (action === "layout.reset") commitLayout(defaultLayout(), t("レイアウトを既定へ戻しました"));
     else if (action === "updates.check") { openSettings("updates"); void checkUpdates(); }
-  }, [annotateTateChuYoko, applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, stepEditorHistory, userSettings.layout]);
+  }, [annotateTateChuYoko, applyJapaneseInput, checkUpdates, closeActiveEditorGroup, commitLayout, createCheckpoint, createProject, exportProject, exportText, insertRuby, isComposing, mergeCurrentChapterIntoPrevious, moveActiveEditorTab, moveActiveEditorTabToOtherGroup, openEditorFind, openProject, openQuickAccess, openSettings, renameProject, revealView, saveAllBuffers, splitActiveEditor, splitCurrentChapter, stepEditorHistory, story.undo, story.redo, t, userSettings.layout]);
 
   const chooseQuickAccessItem = useCallback((item: QuickAccessItem): void => {
     const mode = quickAccessMode;
@@ -1587,51 +1615,34 @@ export function App(): ReactNode {
       for (const buffer of buffers) {
         if (buffer.text !== buffer.savedText && buffer.version.length > 0) await window.kohon.writeRecoveryDraft(project.root, currentDraftInput(buffer.chapter.id, buffer.text, buffer.version));
       }
+      await story.flush();
       await Promise.all([saveActiveNote(), ...buffers.map((buffer) => saveChapterBuffer(buffer.chapter.id))]);
     }
     await saveQueueRef.current;
     await noteSaveQueueRef.current;
-  }, [captureEditorView, currentDraftInput, project, saveActiveNote, saveChapterBuffer]);
+  }, [captureEditorView, currentDraftInput, project, saveActiveNote, saveChapterBuffer, story.flush]);
 
   useEffect(() => window.kohon.onBeforeClose(flushBeforeClose), [flushBeforeClose]);
 
+  const returnHome = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await flushBeforeClose();
+      setRecentProjects(await window.kohon.recentProjects());
+      setProject(null);
+      setLayoutMenuOpen(false);
+      setViewMenu(null);
+      clearMessages();
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(false); }
+  };
+
   const layout = userSettings.layout;
-  const slotVisible = (slot: SlotId): boolean => !layout.zenMode && layout.slots[slot].visible && layout.slots[slot].views.length > 0;
   const activityVisible = !layout.zenMode && layout.activityBarVisible;
-  type WorkbenchArea = "activity" | "primary" | "editor" | "secondary";
-  const leftAreas: WorkbenchArea[] = [];
-  const rightAreas: WorkbenchArea[] = [];
-  if (slotVisible("primary")) (sideOf("primary", layout) === "left" ? leftAreas : rightAreas).push("primary");
-  if (slotVisible("secondary")) (sideOf("secondary", layout) === "left" ? leftAreas : rightAreas).push("secondary");
-  if (rightAreas.includes("primary") && rightAreas.includes("secondary")) rightAreas.reverse();
-  const columnAreas: WorkbenchArea[] = [
-    ...(!activityVisible || layout.activityBar !== "left" ? [] : ["activity" as const]),
-    ...leftAreas,
-    "editor",
-    ...rightAreas,
-    ...(!activityVisible || layout.activityBar !== "right" ? [] : ["activity" as const])
-  ];
-  const columnFor = (area: WorkbenchArea): number => columnAreas.indexOf(area) + 1;
-  const bottomVisible = slotVisible("bottom");
-  const contentColumnNumbers = columnAreas.flatMap((area, index) => area === "activity" ? [] : [index + 1]);
-  const justifiedBottomColumn = `${Math.min(...contentColumnNumbers)} / ${Math.max(...contentColumnNumbers) + 1}`;
-  let livePrimarySize = layout.slots.primary.size;
-  let liveSecondarySize = layout.slots.secondary.size;
-  const widthBudget = Math.max(0, viewport.width - (activityVisible ? 52 : 0) - 430);
-  let widthOverflow = (slotVisible("primary") ? livePrimarySize : 0) + (slotVisible("secondary") ? liveSecondarySize : 0) - widthBudget;
-  if (widthOverflow > 0 && slotVisible("secondary")) {
-    const shrink = Math.min(widthOverflow, Math.max(0, liveSecondarySize - LAYOUT_LIMITS.secondary.min));
-    liveSecondarySize -= shrink;
-    widthOverflow -= shrink;
-  }
-  if (widthOverflow > 0 && slotVisible("primary")) livePrimarySize -= Math.min(widthOverflow, Math.max(0, livePrimarySize - LAYOUT_LIMITS.primary.min));
-  const workspaceHeight = workspaceRef.current?.clientHeight ?? viewport.height - 52;
-  const liveBottomSize = Math.max(0, Math.min(layout.slots.bottom.size, workspaceHeight - EDITOR_SCROLL_MIN_HEIGHT - 98));
   const workspaceStyle = {
-    gridTemplateColumns: columnAreas.map((area) => area === "activity" ? "var(--nl-activity, 52px)" : area === "primary" ? `${livePrimarySize}px` : area === "secondary" ? `${liveSecondarySize}px` : "minmax(430px, 1fr)").join(" "),
-    gridTemplateRows: bottomVisible
-      ? layout.bottomPanelMaximized ? "0 minmax(200px, 1fr)" : `minmax(240px, 1fr) ${liveBottomSize}px`
-      : "minmax(240px, 1fr)"
+    gridTemplateColumns: activityVisible ? layout.activityBar === "left" ? "var(--nl-activity, 52px) minmax(0, 1fr)" : "minmax(0, 1fr) var(--nl-activity, 52px)" : "minmax(0, 1fr)",
+    gridTemplateRows: "minmax(0, 1fr)"
   } as CSSProperties;
   const shellStyle = {
     "--editor-font": editorFont,
@@ -1663,6 +1674,7 @@ export function App(): ReactNode {
     onLoginCodex={loginCodex}
     onLogoutCodex={logoutCodex}
     onRefreshCodexModels={refreshCodexModels}
+    onCheckCodexRuntimeUpdates={async()=>{setConnections(await window.kohon.checkCodexRuntimeUpdates());}}
     onConnectOpenAI={connectOpenAI}
     onDisconnectOpenAI={disconnectOpenAI}
     onLoginGitHub={loginGitHub}
@@ -1674,171 +1686,14 @@ export function App(): ReactNode {
   /> : null;
 
   const quickAccessOverlay = quickAccessMode === null ? null : <QuickAccess
-    title={quickAccessMode === "commands" ? "コマンド パレット" : "章をクイック オープン"}
-    placeholder={quickAccessMode === "commands" ? "実行する操作を入力" : "章・場面の名前を入力"}
+    title={t(quickAccessMode === "commands" ? "コマンド パレット" : "章をクイック オープン")}
+    placeholder={t(quickAccessMode === "commands" ? "実行する操作を入力" : "章・場面の名前を入力")}
     query={quickAccessQuery}
     items={quickAccessMode === "commands" ? commandItems : chapterItems}
     onQuery={setQuickAccessQuery}
     onChoose={chooseQuickAccessItem}
     onClose={() => setQuickAccessMode(null)}
   />;
-
-  if (project === null) return <div className={shellClass} style={shellStyle}>
-    <Welcome appInfo={appInfo} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onSettings={() => openSettings("appearance")} />
-    {promptDialog}
-    {settingsOverlay}
-    {quickAccessOverlay}
-  </div>;
-
-  const selectViewInSlot = (slot: SlotId, view: ViewId): void => {
-    commitLayout({
-      ...layout,
-      slots: { ...layout.slots, [slot]: { ...layout.slots[slot], activeView: view, visible: true } }
-    });
-  };
-
-  const renderView = (view: ViewId): ReactNode => {
-    if (view === "outline") return <div className="outline-content">
-      <div className="pane-heading"><div
-        className="pane-title-drag dock-handle"
-        onPointerDown={(event) => beginDockDrag("outline", event)}
-        onContextMenu={(event) => { event.preventDefault(); openViewMenu("outline", event.clientX, event.clientY); }}
-        onKeyDown={(event) => handleViewMenuKey("outline", event)}
-        tabIndex={0}
-        title="ドラッグで移動。Shift+F10で配置メニュー"
-      ><span className="eyebrow">MANUSCRIPT</span><h2>章・場面</h2></div><div className="pane-tools"><button className="icon-button import-button" title="TXT / Markdownを取り込む" aria-label="TXTまたはMarkdownを取り込む" onClick={importDocuments}><AppIcon name="import" /></button><button className="outline-add-button" title="章を追加" onClick={() => void addChapter("chapter")}>＋章</button><button className="outline-add-button" title="場面を追加" onClick={() => void addChapter("scene")}>＋場面</button></div></div>
-      <nav className="chapter-list" aria-label="章・場面" onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
-        {manifestChapters.map((item, index) => {
-          const kind = item.kind ?? "chapter";
-          const dropClass = chapterDropIndex === index ? "drop-before" : chapterDropIndex === index + 1 ? "drop-after" : "";
-          return <button key={item.id} aria-current={item.id === activeChapterId ? "page" : undefined} className={`${item.id === activeChapterId ? "chapter active" : "chapter"} ${kind === "scene" ? "scene" : ""} ${item.id === chapterDragId ? "drag-source" : ""} ${dropClass}`} onClick={() => void loadChapter(item.id)} disabled={busy} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setChapterDragId(item.id); setChapterDropIndex(null); }} onDragEnd={() => { setChapterDragId(null); setChapterDropIndex(null); }} onDragOver={(event) => { if (chapterDragId === null) return; event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setChapterDropIndex(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); void dropChapter(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; if (event.key === "ArrowUp") { event.preventDefault(); void moveChapterById(item.id, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); void moveChapterById(item.id, 1); } }} title={`${kind === "scene" ? "場面" : "章"}。ドラッグ、または Alt+Shift+↑/↓ で移動`}>
-            <span className="chapter-order">{String(item.order + 1).padStart(2, "0")}</span><span>{item.title}</span>{kind === "scene" && <small className="chapter-kind">場面</small>}
-          </button>;
-        })}
-      </nav>
-      {chapter !== null && <ChapterMetadataPanel key={`${chapter.chapter.id}:${JSON.stringify(chapter.chapter.metadata ?? {})}`} chapter={chapter.chapter} onSave={saveChapterMetadata} />}
-      <OutlineNotes notes={notes} activeChapterId={activeChapterId} activeNote={activeNote} draft={noteDraft} saveState={noteSaveState} showAll={showAllNotes} onShowAll={setShowAllNotes} onCreate={createNote} onOpen={openNote} onDraft={updateNoteDraft} onTogglePin={toggleCurrentChapterPin} onSave={saveActiveNote} onArchive={setActiveNoteArchived} />
-      <div className="outline-footer"><code title={project.root}>{project.root}</code><span>Markdown正本</span></div>
-    </div>;
-    if (view === "lens") return <LensPanel
-      role={role} setRole={setRole} provider={provider} setProvider={(next) => { setProvider(next); setModelId(next === "codex" ? userSettings.ai.codexModel : next === "openai" ? userSettings.ai.openaiModel : "offline-mock-v0.1"); }} modelId={modelId} setModelId={(value) => { setModelId(value); if (provider === "codex") void updateUserSettings({ ai: { codexModel: value } }); }} codexModels={connections.codex.models} codexConnected={connections.codex.connected} openAIConnected={connections.openai.connected} onOpenSettings={() => openSettings("ai")}
-      query={lensQuery} setQuery={setLensQuery} scopeMode={scopeMode} setScopeMode={setScopeMode} scopeTitles={scopeChapters.map((item) => item.title)}
-      approved={scopeApproved} setApproved={setScopeApproved} thread={threads[role]} result={lensResult?.role === role ? lensResult : null}
-      running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
-      reviews={reviewFindings} onReview={jumpToReviewFinding} onReviewStatus={updateReviewStatus} onReviewRecheck={recheckReview}
-    />;
-    if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
-    return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onRestoreChapter={restoreCheckpointChapter} onVariation={createVariation} />;
-  };
-
-  const renderSlot = (slotId: SlotId): ReactNode => {
-    if (!slotVisible(slotId)) return null;
-    const slot = layout.slots[slotId];
-    const activeView = slot.activeView ?? slot.views[0] ?? null;
-    const bottom = slotId === "bottom";
-    const physicalSide = bottom ? null : sideOf(slotId, layout);
-    const activeDrop = dockDrag?.target.kind === "slot-tab" && dockDrag.target.slot === slotId;
-    return <aside
-      className={`view-slot ${slotId === "primary" ? "outline-pane" : "inspector-pane"} slot-${slotId} ${bottom ? "dock-bottom" : `dock-${physicalSide}`} ${bottom && layout.bottomPanelMaximized ? "is-maximized" : ""} ${activeDrop ? "dock-target-active" : ""}`}
-      style={{
-        gridColumn: bottom ? layout.bottomPanelAlignment === "justify" ? justifiedBottomColumn : columnFor("editor") : columnFor(slotId),
-        gridRow: bottom ? 2 : bottomVisible && layout.bottomPanelAlignment === "justify" ? 1 : "1 / -1"
-      }}
-      data-slot-id={slotId}
-    >
-      {!(bottom && layout.bottomPanelMaximized) && <div
-        className={`pane-resizer ${bottom ? "horizontal edge-top" : `vertical edge-${physicalSide === "left" ? "right" : "left"}`}`}
-        role="separator"
-        tabIndex={0}
-        aria-label={`${activeView === null ? "パネル" : VIEW_LABELS[activeView]}のサイズを変更`}
-        aria-orientation={bottom ? "horizontal" : "vertical"}
-        aria-valuemin={LAYOUT_LIMITS[slotId].min}
-        aria-valuemax={LAYOUT_LIMITS[slotId].max}
-        aria-valuenow={Math.round(slot.size)}
-        onPointerDown={(event) => beginPaneResize(slotId, event)}
-        onKeyDown={(event) => resizePaneFromKeyboard(slotId, event)}
-      />}
-      <div className="view-tabbar" role="tablist" aria-label={`${slotId}パネル`}>
-        <div className="view-tabs-scroll">{slot.views.map((view) => <button
-          key={view}
-          type="button"
-          role="tab"
-          aria-selected={activeView === view}
-          aria-controls={`view-panel-${slotId}`}
-          tabIndex={activeView === view ? 0 : -1}
-          className={`view-tab ${activeView === view ? "active" : ""}`}
-          data-view-tab={view}
-          title={`${VIEW_LABELS[view]} — ドラッグまたは右クリックで移動`}
-          onClick={() => { if (!suppressDockClickRef.current) selectViewInSlot(slotId, view); }}
-          onPointerDown={(event) => beginDockDrag(view, event)}
-          onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => { event.preventDefault(); openViewMenu(view, event.clientX, event.clientY); }}
-          onKeyDown={(event) => handleViewMenuKey(view, event)}
-        ><span className="view-tab-grip" aria-hidden="true">⠿</span><AppIcon name={view === "outline" ? "files" : view} size={14} />{VIEW_LABELS[view]}</button>)}</div>
-        <div className="view-tab-actions">
-          {bottom && <button type="button" className="view-tab-action" aria-label={layout.bottomPanelMaximized ? "下部パネルを元の高さへ戻す" : "下部パネルを最大化"} title={layout.bottomPanelMaximized ? "元の高さへ戻す" : "最大化"} onClick={() => commitLayout({ ...layout, bottomPanelMaximized: !layout.bottomPanelMaximized })}><AppIcon name="focus" size={15} /></button>}
-          {activeView !== null && <button type="button" className="view-tab-action" aria-label="パネル操作" title="配置とパネル操作" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openViewMenu(activeView, rect.right - 216, rect.bottom + 4); }}><AppIcon name="more" size={15} /></button>}
-          <button type="button" className="view-tab-action" aria-label="パネルを閉じる" title="パネルを閉じる" onClick={() => commitLayout({ ...layout, bottomPanelMaximized: bottom ? false : layout.bottomPanelMaximized, slots: { ...layout.slots, [slotId]: { ...slot, visible: false } } }, "パネルを閉じました")}><AppIcon name="close" size={15} /></button>
-        </div>
-      </div>
-      <div className="view-slot-body" id={`view-panel-${slotId}`} role="tabpanel" aria-label={activeView === null ? "空のパネル" : VIEW_LABELS[activeView]}>{activeView === null ? null : renderView(activeView)}</div>
-    </aside>;
-  };
-
-  const menuSlot = viewMenu === null ? null : slotOf(layout, viewMenu.view);
-  const moveMenuView = (destination: PhysicalSide | "bottom"): void => {
-    if (viewMenu === null) return;
-    commitLayout(placeViewOnSide(layout, viewMenu.view, destination), `${VIEW_LABELS[viewMenu.view]}を${destination === "left" ? "左" : destination === "right" ? "右" : "下部"}へ移動しました`);
-    setViewMenu(null);
-  };
-  const moveMenuPanel = (side: PhysicalSide): void => {
-    if (viewMenu === null || menuSlot === null || menuSlot === "bottom") return;
-    commitLayout(moveSlotToSide(layout, menuSlot, side), `${VIEW_LABELS[viewMenu.view]}のパネルを${side === "left" ? "左" : "右"}へ移動しました`);
-    setViewMenu(null);
-  };
-  const reorderMenuView = (delta: -1 | 1): void => {
-    if (viewMenu === null || menuSlot === null) return;
-    const views = layout.slots[menuSlot].views;
-    const current = views.indexOf(viewMenu.view);
-    if (current < 0) return;
-    commitLayout(moveView(layout, viewMenu.view, menuSlot, Math.max(0, Math.min(views.length - 1, current + delta))), `${VIEW_LABELS[viewMenu.view]}のタブ順を変更しました`);
-    setViewMenu(null);
-  };
-  const toggleSlotVisibility = (slot: SlotId): void => {
-    const current = layout.slots[slot];
-    if (!current.visible && current.views.length === 0) {
-      const preferred: ViewId = slot === "primary" ? "outline" : slot === "secondary" ? "lens" : layout.slots.secondary.activeView ?? "history";
-      commitLayout({ ...moveView(layout, preferred, slot), zenMode: false });
-      return;
-    }
-    commitLayout({
-      ...layout,
-      zenMode: false,
-      bottomPanelMaximized: slot === "bottom" && current.visible ? false : layout.bottomPanelMaximized,
-      slots: { ...layout.slots, [slot]: { ...current, visible: !current.visible } }
-    });
-  };
-
-  const beginEditorTabDrag = (groupId: EditorGroupId, chapterId: string, event: ReactDragEvent<HTMLDivElement>): void => {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", chapterId);
-    setEditorTabDrag({ groupId, chapterId });
-    setEditorTabDrop(null);
-  };
-  const editorTabDropIndex = (event: ReactDragEvent<HTMLDivElement>, index: number): number => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
-  };
-  const dropEditorTab = (groupId: EditorGroupId, index: number): void => {
-    if (editorTabDrag === null) return;
-    setEditorSession((current) => {
-      const source = current.groups.find((group) => group.id === editorTabDrag.groupId);
-      const sourceIndex = source?.tabs.findIndex((tabState) => tabState.chapterId === editorTabDrag.chapterId) ?? -1;
-      const targetIndex = editorTabDrag.groupId === groupId && sourceIndex >= 0 && index > sourceIndex ? index - 1 : index;
-      return moveEditorTab(current, editorTabDrag.groupId, editorTabDrag.chapterId, groupId, targetIndex);
-    });
-    setEditorTabDrag(null);
-    setEditorTabDrop(null);
-  };
 
   const beginEditorComposition = useCallback((groupId: EditorGroupId, chapterId: string, editor: HTMLTextAreaElement): void => {
     activateEditorGroup(groupId);
@@ -1883,7 +1738,7 @@ export function App(): ReactNode {
       chapterId,
       text: editor.value,
       selection: { start: editor.selectionStart, end: editor.selectionEnd },
-      origin: inputType === "insertText" || inputType.startsWith("deleteContent") ? "typing" : "input"
+      origin: editOriginForInput(inputType)
     };
   }, []);
 
@@ -1922,56 +1777,160 @@ export function App(): ReactNode {
     updateBufferText(chapterId, editor.value);
   }, [updateBufferText]);
 
+  if (project === null) return <LocaleProvider locale={locale}><div className={shellClass} style={shellStyle}>
+    <ProjectHome appInfo={appInfo} recent={recentProjects} busy={busy} error={error} colorTheme={colorTheme} onToggleTheme={toggleColorTheme} onCreate={createProject} onOpen={openProject} onOpenRecent={(root) => void openRecentProject(root)} onSettings={() => openSettings("appearance")} />
+    {promptDialog}
+    {settingsOverlay}
+    {quickAccessOverlay}
+  </div></LocaleProvider>;
+
+  const selectViewInTabs = (nodeId: string, view: ViewId): void => commitLayout(setTabsActive(layout, nodeId, view));
+  const outlineCreateMenu = <details ref={outlineCreateMenuRef} className="outline-create-menu"><summary aria-label={t("章を追加")} title={t("章を追加")}><AppIcon name="add" size={16} /></summary><div><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void addChapter("chapter"); }}>{t("章を追加")}</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void addChapter("scene"); }}>{t("場面を追加")}</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void importDocuments(); }}>{t("TXT / Markdownを取り込む")}</button></div></details>;
+
+  const renderView = (view: ViewId): ReactNode => {
+    if (view === "outline") return <div className="outline-content">
+      <nav className="chapter-list" aria-label={t("章・場面")} onDragOver={(event) => { if (event.target !== event.currentTarget || chapterDragId === null) return; event.preventDefault(); setChapterDropIndex(manifestChapters.length); }} onDrop={(event) => { if (event.target !== event.currentTarget) return; event.preventDefault(); void dropChapter(manifestChapters.length); }}>
+        {manifestChapters.map((item, index) => {
+          const kind = item.kind ?? "chapter";
+          const dropClass = chapterDropIndex === index ? "drop-before" : chapterDropIndex === index + 1 ? "drop-after" : "";
+          return <button key={item.id} aria-current={item.id === activeChapterId ? "page" : undefined} className={`${item.id === activeChapterId ? "chapter active" : "chapter"} ${kind === "scene" ? "scene" : ""} ${item.id === chapterDragId ? "drag-source" : ""} ${dropClass}`} onClick={() => void loadChapter(item.id)} disabled={busy} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setChapterDragId(item.id); setChapterDropIndex(null); }} onDragEnd={() => { setChapterDragId(null); setChapterDropIndex(null); }} onDragOver={(event) => { if (chapterDragId === null) return; event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setChapterDropIndex(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); void dropChapter(event.clientY < rect.top + rect.height / 2 ? index : index + 1); }} onKeyDown={(event) => { if (!event.altKey || !event.shiftKey) return; if (event.key === "ArrowUp") { event.preventDefault(); void moveChapterById(item.id, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); void moveChapterById(item.id, 1); } }} title={locale === "en" ? `${item.title} — ${t(kind === "scene" ? "場面" : "章")}. Drag or press Alt+Shift+↑/↓ to move` : `${item.title} — ${kind === "scene" ? "場面" : "章"}。ドラッグ、または Alt+Shift+↑/↓ で移動`}>
+            <span className="chapter-order">{String(item.order + 1).padStart(2, "0")}</span><span>{item.title}</span>{kind === "scene" && <small className="chapter-kind">{t("場面")}</small>}
+          </button>;
+        })}
+      </nav>
+      {chapter !== null && <ChapterMetadataPanel key={`${chapter.chapter.id}:${JSON.stringify(chapter.chapter.metadata ?? {})}`} chapter={chapter.chapter} onSave={saveChapterMetadata} />}
+      <OutlineNotes notes={notes} activeChapterId={activeChapterId} activeNote={activeNote} draft={noteDraft} saveState={noteSaveState} showAll={showAllNotes} onShowAll={setShowAllNotes} onCreate={createNote} onOpen={openNote} onDraft={updateNoteDraft} onTogglePin={toggleCurrentChapterPin} onSave={saveActiveNote} onArchive={setActiveNoteArchived} />
+    </div>;
+    if (view === "story") return <StoryMapPanel key={project?.root} controller={story} chapters={manifestChapters} onOpenChapter={(id, range) => void loadChapter(id, range)} currentManuscriptAnchor={() => { const editor = editorRef.current; if (!editor || !activeChapterId) return null; const anchor = createSceneAnchor(editor.value, editor.selectionStart, editor.selectionEnd); return anchor ? { chapterId: activeChapterId, anchor } : null; }} readChapter={async (id) => { if (!project) throw new Error("Project is closed"); await saveAllBuffers(); return window.kohon.readChapter(project.root, id); }} />;
+    if (view === "lens") return <LensPanel
+      role={role} setRole={setRole} provider={provider} codexConnected={connections.codex.connected} openAIConnected={connections.openai.connected} onOpenSettings={() => openSettings("ai")}
+      query={lensQuery} setQuery={setLensQuery} scopeTitles={scopeChapters.map((item) => item.title)}
+      thread={threads[role]} result={currentLensResult?.role === role ? currentLensResult : null}
+      running={lensBusy} onRun={invokeLens} onClear={() => { setThreads((current) => ({ ...current, [role]: [] })); setLensResult(null); }} onFinding={jumpToFinding}
+      reviews={reviewFindings} onReview={jumpToReviewFinding} onReviewStatus={updateReviewStatus} onReviewRecheck={recheckReview}
+      reviewNoteDrafts={Object.fromEntries(reviewFindings.flatMap(entry => { const draft = reviewNoteDrafts[`${project?.root}\u0000${entry.id}`]; return draft === undefined ? [] : [[entry.id, draft]]; }))}
+      onReviewNoteDraft={(id, value) => { if (project) setReviewNoteDrafts(current => ({ ...current, [`${project.root}\u0000${id}`]: value })); }} onReviewNoteSave={saveReviewNote}
+    />;
+    if (view === "search") return <SearchPanel query={searchQuery} setQuery={(value) => { setSearchQuery(value); setSearchHits([]); setSearchRun(null); }} replacement={searchReplacement} setReplacement={setSearchReplacement} caseSensitive={searchCaseSensitive} setCaseSensitive={(value) => { setSearchCaseSensitive(value); setSearchHits([]); setSearchRun(null); }} hits={searchHits} previewReady={searchRun?.query === searchQuery.trim() && searchRun.caseSensitive === searchCaseSensitive} onSearch={runSearch} onReplace={replaceAcrossProject} onHit={(hit) => void loadChapter(hit.chapterId, hit)} />;
+    return <HistoryPanel entries={checkpoints} diff={historyDiff} onCreate={createCheckpoint} onCompareCurrent={compareCurrentCheckpoint} onComparePair={compareCheckpointPair} onRestore={restoreCheckpoint} onRestoreChapter={restoreCheckpointChapter} onVariation={createVariation} />;
+  };
+
+  const dockPreview = (nodeId: string, includeCenter: boolean): ReactNode => {
+    if (dockDrag?.target.kind !== "dock-zone" || dockDrag.target.nodeId !== nodeId || (!includeCenter && dockDrag.target.zone === "center")) return null;
+    const zone = dockDrag.target.zone;
+    const label = zone === "center" ? t("タブに追加") : t(zone === "left" ? "左に配置" : zone === "right" ? "右に配置" : zone === "top" ? "上に配置" : "下に配置");
+    return <div className="dock-preview-layer" aria-hidden="true"><span className={`dock-preview dock-preview-${zone}`}>{label}</span></div>;
+  };
+
+  const renderDockTabs = (node: DockTabsNode): ReactNode => {
+    const activeView = node.activeView !== null && node.views.includes(node.activeView) ? node.activeView : node.views[0] ?? null;
+    const hidden = node.visible === false;
+    return <aside key={node.id} className={`view-slot dock-tabs-node ${hidden ? "dock-node-hidden" : ""}`} data-dock-node-id={node.id} data-dock-node-type="tabs">
+      <div className="view-tabbar" role="tablist" aria-label={t("パネル")}><div className="view-tabs-scroll">{node.views.map((view) => <button key={view} type="button" role="tab" aria-selected={activeView === view} aria-controls={`view-panel-${node.id}`} tabIndex={activeView === view ? 0 : -1} className={`view-tab ${activeView === view ? "active" : ""}`} data-view-tab={view} title={`${viewLabel(view)} — ${t("ドラッグまたは右クリックで移動")}`} onClick={() => { if (!suppressDockClickRef.current) selectViewInTabs(node.id, view); }} onPointerDown={(event) => beginDockDrag(view, event)} onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => { event.preventDefault(); openViewMenu(view, event.clientX, event.clientY); }} onKeyDown={(event) => handleViewMenuKey(view, event)}><span className="view-tab-grip" aria-hidden="true">⠿</span><AppIcon name={view === "outline" ? "files" : view} size={14} />{viewLabel(view)}</button>)}</div><div className={`view-tab-actions ${activeView === "outline" ? "outline-tab-actions" : ""}`}>{activeView === "outline" && outlineCreateMenu}{activeView !== null && <button type="button" className="view-tab-action" aria-label={t("パネル操作")} title={t("配置とパネル操作")} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openViewMenu(activeView, rect.right - 216, rect.bottom + 4); }}><AppIcon name="more" size={15} /></button>}<button type="button" className="view-tab-action" aria-label={t("パネルを閉じる")} title={t("パネルを閉じる")} onClick={() => activeView !== null && commitLayout(toggleViewVisibility(layout, activeView), t("パネルを閉じました"))}><AppIcon name="close" size={15} /></button></div></div>
+      <div className="view-slot-body" id={`view-panel-${node.id}`} role="tabpanel" aria-label={activeView === null ? t("空のパネル") : viewLabel(activeView)}>{activeView === null ? null : renderView(activeView)}</div>{dockPreview(node.id, true)}
+    </aside>;
+  };
+
+  const renderDockNode = (node: DockNode): ReactNode => {
+    if (node.type === "editor") return <section key={node.id} data-editor-pane data-dock-node-id={node.id} data-dock-node-type="editor" className={`dock-editor-node editor-groups split-${editorSession.split}`} aria-label={t("本文エディター")}>{editorSession.groups.map(renderEditorGroup)}{dockPreview(node.id, false)}</section>;
+    if (node.type === "tabs") return renderDockTabs(node);
+    const visibleChildren = node.children.map((child, index) => ({ child, index })).filter(({ child }) => dockNodeVisible(child));
+    const flexWeights = dockFlexWeights(visibleChildren.map(({ index }) => node.sizes[index] ?? 1));
+    return <section key={node.id} data-dock-node-id={node.id} data-dock-node-type="split" className={`dock-split dock-split-${node.direction}`}>
+      {visibleChildren.map(({ child, index }, visibleIndex) => { const next = visibleChildren[visibleIndex + 1]; return <Fragment key={child.id}><div className="dock-split-child" style={{ flex: `${flexWeights[visibleIndex]} 1 0%` }}>{renderDockNode(child)}</div>{next !== undefined && <div className="dock-split-separator" role="separator" tabIndex={0} aria-orientation={node.direction === "horizontal" ? "vertical" : "horizontal"} aria-valuemin={8} aria-valuemax={92} aria-valuenow={Math.round((node.sizes[index] ?? 0) * 100)} aria-label={t("分割位置を変更")} onPointerDown={(event) => beginPaneResize(node.id, index, next.index, event)} onKeyDown={(event) => resizePaneFromKeyboard(node.id, index, next.index, event)} />}</Fragment>; })}
+    </section>;
+  };
+
+  const editorDockNode = (() => { const find = (node: DockNode): DockNode | null => node.type === "editor" ? node : node.type === "split" ? node.children.map(find).find((item): item is DockNode => item !== null) ?? null : null; return find(layout.root); })();
+  const menuNode = viewMenu === null ? null : findViewNode(layout, viewMenu.view);
+  const moveMenuView = (destination: PhysicalSide | "top" | "bottom"): void => {
+    if (viewMenu === null) return;
+    const target = editorDockNode?.id ?? layout.root.id;
+    commitLayout(dockView(layout, viewMenu.view, target, destination), locale === "en" ? `Moved ${viewLabel(viewMenu.view)}` : `${VIEW_LABELS[viewMenu.view]}を移動しました`);
+    setViewMenu(null);
+  };
+  const reorderMenuView = (delta: -1 | 1): void => {
+    if (viewMenu === null || menuNode === null || menuNode.type !== "tabs") return;
+    const views = menuNode.views;
+    const current = views.indexOf(viewMenu.view);
+    if (current < 0) return;
+    const insertion = delta < 0 ? current - 1 : current + 2;
+    commitLayout(dockView(layout, viewMenu.view, menuNode.id, "center", Math.max(0, Math.min(views.length, insertion))), locale === "en" ? `Reordered the ${viewLabel(viewMenu.view)} tab` : `${VIEW_LABELS[viewMenu.view]}のタブ順を変更しました`);
+    setViewMenu(null);
+  };
+  const beginEditorTabDrag = (groupId: EditorGroupId, chapterId: string, event: ReactDragEvent<HTMLDivElement>): void => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", chapterId);
+    setEditorTabDrag({ groupId, chapterId });
+    setEditorTabDrop(null);
+  };
+  const editorTabDropIndex = (event: ReactDragEvent<HTMLDivElement>, index: number): number => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
+  };
+  const dropEditorTab = (groupId: EditorGroupId, index: number): void => {
+    if (editorTabDrag === null) return;
+    setEditorSession((current) => {
+      const source = current.groups.find((group) => group.id === editorTabDrag.groupId);
+      const sourceIndex = source?.tabs.findIndex((tabState) => tabState.chapterId === editorTabDrag.chapterId) ?? -1;
+      const targetIndex = editorTabDrag.groupId === groupId && sourceIndex >= 0 && index > sourceIndex ? index - 1 : index;
+      return moveEditorTab(current, editorTabDrag.groupId, editorTabDrag.chapterId, groupId, targetIndex);
+    });
+    setEditorTabDrag(null);
+    setEditorTabDrop(null);
+  };
+
   const renderEditorGroup = (group: EditorSessionState["groups"][number]): ReactNode => {
     const groupChapterId = group.activeChapterId;
     const buffer = groupChapterId === null ? undefined : editorBuffers.buffers[groupChapterId];
     const groupActive = group.id === editorSession.activeGroupId;
     const groupIndex = manifestChapters.findIndex((item) => item.id === groupChapterId);
     const groupStats = groupChapterId === null ? undefined : editorStats[groupChapterId];
-    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onSave={() => void saveAllBuffers()} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
+    return <EditorPane key={group.id} group={group} groupActive={groupActive} groupCount={editorSession.groups.length} groupChapterId={groupChapterId} groupIndex={groupIndex} buffer={buffer} buffers={editorBuffers.buffers} groupStats={groupStats} manifestChapters={manifestChapters} theme={theme} writingMode={writingMode} manuscriptPalette={manuscriptPalette} findOpen={findOpen} replaceVisible={replaceVisible} findQuery={findQuery} replacement={replacement} caseSensitive={caseSensitive} findMatchCount={findMatches.length} findMatchIndex={findMatchIndex} editorTabDrag={editorTabDrag} editorTabDrop={editorTabDrop} editorRefs={editorRefs} editorRef={editorRef} onActivate={() => activateEditorGroup(group.id)} onTabDropOver={(groupId, index, event) => { if (editorTabDrag === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setEditorTabDrop({ groupId, index }); }} onTabDrop={(groupId, index, event) => { event.preventDefault(); event.stopPropagation(); dropEditorTab(groupId, index); }} onDropIndex={editorTabDropIndex} onBeginTabDrag={beginEditorTabDrag} onEndTabDrag={() => { setEditorTabDrag(null); setEditorTabDrop(null); }} onLoadChapter={(chapterId, groupId) => void loadChapter(chapterId, undefined, groupId)} onMoveTab={(groupId, chapterId, target) => setEditorSession((current) => moveEditorTab(current, groupId, chapterId, groupId, target))} onCloseTab={(chapterId, groupId) => void closeChapterTab(chapterId, groupId)} onFindQuery={(value) => { setFindQuery(value); setFindMatchIndex(-1); }} onFindReplacement={setReplacement} onToggleReplace={() => setReplaceVisible((visible) => !visible)} onToggleCase={() => { setCaseSensitive((value) => !value); setFindMatchIndex(-1); }} onPrevious={() => moveFindMatch(-1)} onNext={() => moveFindMatch(1)} onReplace={replaceCurrentMatch} onReplaceAll={replaceEveryMatch} onCloseFind={closeEditorFind} onOpenFind={() => openEditorFind(false)} onSplit={splitActiveEditor} onCloseGroup={() => void closeActiveEditorGroup()} onMoveChapter={(delta) => void moveChapter(delta)} onSplitChapter={() => void splitCurrentChapter()} onMergeChapter={() => void mergeCurrentChapterIntoPrevious()} onRenameChapter={() => void renameChapter()} onDeleteChapter={() => void deleteChapter()} onCaptureInput={captureEditorInput} onCompositionStart={beginEditorComposition} onCompositionEnd={finishEditorComposition} onChange={changeEditorText} onHistory={stepEditorHistory} compositionRef={compositionRef} onSelection={recordEditorView} onBlur={(groupId, chapterId, editor) => { if (pendingInputRef.current?.groupId === groupId) pendingInputRef.current = null; recordEditorView(groupId, chapterId, editor); void saveChapterBuffer(chapterId); }} onSave={() => void saveAllBuffers().catch(cause => setError(errorText(cause)))} onTheme={(value) => void updateProjectSettings({ theme: value })} onWritingMode={() => void updateProjectSettings({ writingMode: writingMode === "vertical-rl" ? "horizontal" : "vertical-rl" })} />;
   };
-  return <div className={shellClass} style={shellStyle}><div className={`app ${layout.zenMode ? "zen-mode" : ""}`}>
-    <header className="topbar">
-      <div className="brand"><span className="brand-mark"><AppIcon name="logo" size={22} /></span><div><b>KOHON</b><button className="project-title" onClick={renameProject} title="作品名を変更">{project.manifest.title}</button></div></div>
-      <button type="button" className="top-command" onClick={() => openQuickAccess("commands")} title="コマンド パレットを開く"><AppIcon name="search" size={15} /><span>操作を検索</span><kbd>{formatKeybinding(userSettings.keybindings["workbench.commandPalette"])}</kbd></button>
+  return <LocaleProvider locale={locale}><div className={shellClass} style={shellStyle}><div className={`app ${layout.zenMode ? "zen-mode" : ""}`}>
+    <WindowTitlebar appInfo={appInfo} brand={<button className="brand-home" onClick={() => void returnHome()} disabled={busy} title={t("保存して作品一覧へ")} aria-label={t("保存して作品一覧へ")}><AppIcon name="logo" size={18} /></button>}>
+      <div className="titlebar-drag-space" data-tauri-drag-region />
+      <button type="button" className="command-center" aria-label={t("操作を検索")} onClick={() => openQuickAccess("commands")} title={`${t("操作を検索")} (${t(formatKeybinding(userSettings.keybindings["workbench.commandPalette"]))})`}><AppIcon name="search" size={14} /><span>{project.manifest.title}</span><kbd>{t(formatKeybinding(userSettings.keybindings["workbench.commandPalette"]))}</kbd></button>
+      <div className="titlebar-drag-space" data-tauri-drag-region />
       <div className="top-actions">
-        <button className="ghost action-with-icon" onClick={createCheckpoint} title="現在の状態を保存点にする"><AppIcon name="checkpoint" />保存点</button>
-        <button className="ghost action-with-icon" onClick={exportProject} title="Markdownを書き出す"><AppIcon name="export" />書き出し</button>
-        <button className={`icon-button top-icon ${layout.zenMode ? "active" : ""}`} onClick={() => commitLayout({ ...layout, zenMode: !layout.zenMode })} aria-label="集中モード" title="集中モード"><AppIcon name="focus" /></button>
+        <button className={`icon-button top-icon ${layout.zenMode ? "active" : ""}`} onClick={() => commitLayout({ ...layout, zenMode: !layout.zenMode })} aria-label={t("集中モード")} aria-pressed={layout.zenMode} title={t("集中モード")}><AppIcon name="focus" /></button>
         <div className="layout-menu-anchor">
-          <button className={`icon-button top-icon ${layoutMenuOpen ? "active" : ""}`} onClick={() => setLayoutMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={layoutMenuOpen} aria-label="レイアウトを変更" title="レイアウト"><AppIcon name="layout" /></button>
+          <button className={`icon-button top-icon ${layoutMenuOpen ? "active" : ""}`} onClick={() => setLayoutMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={layoutMenuOpen} aria-label={t("レイアウトを変更")} title={t("レイアウト")}><AppIcon name="layout" /></button>
           {layoutMenuOpen && <div className="layout-quick-menu" role="menu">
-            <strong>作業レイアウト</strong>
-            <div className="layout-menu-section"><span>すぐ切り替える</span><div className="layout-preset-grid">
-              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "writing"), "執筆レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>執筆</button>
-              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "review"), "推敲レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>推敲</button>
-              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "compare"), "比較レイアウトへ切り替えました"); setLayoutMenuOpen(false); }}>比較</button>
+            <button role="menuitem" onClick={() => { setLayoutMenuOpen(false); void createCheckpoint(); }}><AppIcon name="checkpoint" size={15} /><span>{locale === "en" ? "Save snapshot" : "いまの状態を残す"}</span></button>
+            <button role="menuitem" onClick={() => { setLayoutMenuOpen(false); void exportProject(); }}><AppIcon name="export" size={15} /><span>{locale === "en" ? "Export…" : "エクスポート…"}</span></button>
+            <button role="menuitem" onClick={() => { setLayoutMenuOpen(false); void exportReviewBrief(); }}><AppIcon name="check" size={15} /><span>{locale === "en" ? "Review brief…" : "査読ブリーフを書き出す…"}</span></button>
+            <strong>{t("作業レイアウト")}</strong>
+            <div className="layout-menu-section"><span>{t("すぐ切り替える")}</span><div className="layout-preset-grid">
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "writing"), t("執筆レイアウトへ切り替えました")); setLayoutMenuOpen(false); }}>{t("執筆")}</button>
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "review"), t("推敲レイアウトへ切り替えました")); setLayoutMenuOpen(false); }}>{t("推敲")}</button>
+              <button type="button" role="menuitem" onClick={() => { commitLayout(applyLayoutPreset(layout, "compare"), t("比較レイアウトへ切り替えました")); setLayoutMenuOpen(false); }}>{t("比較")}</button>
             </div></div>
-            <div className="layout-menu-section"><span>表示</span>
-              <button role="menuitemcheckbox" aria-checked={layout.activityBarVisible} onClick={() => commitLayout({ ...layout, activityBarVisible: !layout.activityBarVisible, zenMode: false })}><b>{layout.activityBarVisible ? "✓" : ""}</b>アクティビティバー</button>
-              {(["primary", "secondary", "bottom"] as const).map((slot) => <button key={slot} role="menuitemcheckbox" aria-checked={layout.slots[slot].visible} onClick={() => toggleSlotVisibility(slot)}><b>{layout.slots[slot].visible ? "✓" : ""}</b>{slot === "primary" ? "メインパネル" : slot === "secondary" ? "補助パネル" : "下部パネル"}</button>)}
+            <div className="layout-menu-section"><span>{t("表示")}</span>
+              <button role="menuitemcheckbox" aria-checked={layout.activityBarVisible} onClick={() => commitLayout({ ...layout, activityBarVisible: !layout.activityBarVisible, zenMode: false })}><b>{layout.activityBarVisible ? "✓" : ""}</b>{t("アクティビティバー")}</button>
+              {VIEW_IDS.map((view) => { const node = findViewNode(layout, view); const active = node?.visible === true && node.activeView === view; return <button key={view} role="menuitemcheckbox" aria-checked={active} onClick={() => toggleView(view)}><b>{active ? "✓" : ""}</b>{viewLabel(view)}</button>; })}
             </div>
-            <div className="layout-menu-section"><span>アクティビティバーの位置</span><div className="layout-segmented"><button className={layout.activityBar === "left" ? "active" : ""} onClick={() => commitLayout({ ...layout, activityBar: "left", activityBarVisible: true, zenMode: false })}>左</button><button className={layout.activityBar === "right" ? "active" : ""} onClick={() => commitLayout({ ...layout, activityBar: "right", activityBarVisible: true, zenMode: false })}>右</button></div></div>
-            <div className="layout-menu-section"><span>下部パネル</span><div className="layout-segmented"><button className={layout.bottomPanelAlignment === "editor" ? "active" : ""} onClick={() => commitLayout({ ...layout, bottomPanelAlignment: "editor" })}>本文幅</button><button className={layout.bottomPanelAlignment === "justify" ? "active" : ""} onClick={() => commitLayout({ ...layout, bottomPanelAlignment: "justify" })}>全幅</button></div><button role="menuitemcheckbox" aria-checked={layout.bottomPanelMaximized} disabled={!layout.slots.bottom.visible} onClick={() => commitLayout({ ...layout, bottomPanelMaximized: !layout.bottomPanelMaximized })}><b>{layout.bottomPanelMaximized ? "✓" : ""}</b>最大化</button></div>
-            <span className="menu-separator" /><button role="menuitem" onClick={() => { commitLayout(defaultLayout(), "レイアウトを既定へ戻しました"); setLayoutMenuOpen(false); }}><b>↺</b>既定に戻す</button>
+            <div className="layout-menu-section"><span>{t("アクティビティバーの位置")}</span><div className="layout-segmented"><button className={layout.activityBar === "left" ? "active" : ""} onClick={() => commitLayout({ ...layout, activityBar: "left", activityBarVisible: true, zenMode: false })}>{t("左")}</button><button className={layout.activityBar === "right" ? "active" : ""} onClick={() => commitLayout({ ...layout, activityBar: "right", activityBarVisible: true, zenMode: false })}>{t("右")}</button></div></div>
+            <span className="menu-separator" /><button role="menuitem" onClick={() => { commitLayout(defaultLayout(), t("レイアウトを既定へ戻しました")); setLayoutMenuOpen(false); }}><b>↺</b>{t("既定に戻す")}</button>
           </div>}
         </div>
       </div>
-    </header>
+    </WindowTitlebar>
 
-    {(error !== null || notice !== null) && <div className={`banner ${error !== null ? "error" : "notice"}`} role="status"><span>{error ?? notice}</span><button aria-label="閉じる" onClick={clearMessages}><AppIcon name="close" /></button></div>}
+    {(error !== null || notice !== null) && <div className={`banner ${error !== null ? "error" : "notice"}`} role="status"><span>{error ?? notice}</span><button aria-label={t("閉じる")} onClick={clearMessages}><AppIcon name="close" /></button></div>}
     {recoveryConflict !== null && <div className="recovery-banner" role="alert">
-      <div><b>未保存の復旧ドラフトがあります</b><span>保存済み本文が別に更新されているため、自動では上書きしません。</span></div>
-      <button className="secondary" onClick={useRecoveryDraft}>復旧ドラフトを開く</button>
-      <button className="ghost" onClick={() => void discardRecoveryDraft()}>保存済み本文を維持</button>
+      <div><b>{t("未保存の復旧ドラフトがあります")}</b><span>{t("保存済み本文が別に更新されているため、自動では上書きしません。")}</span></div>
+      <button className="secondary" onClick={useRecoveryDraft}>{t("復旧ドラフトを開く")}</button>
+      <button className="ghost" onClick={() => void discardRecoveryDraft()}>{t("保存済み本文を維持")}</button>
     </div>}
 
     <div className="workspace" ref={workspaceRef} style={workspaceStyle}>
-      {activityVisible && <aside className={`activity-bar activity-${layout.activityBar}`} style={{ gridColumn: columnFor("activity"), gridRow: "1 / -1" }} aria-label="表示切り替え">
+      {activityVisible && <aside className={`activity-bar activity-${layout.activityBar}`} style={{ gridColumn: layout.activityBar === "left" ? 1 : 2, gridRow: "1" }} aria-label={t("表示切り替え")}>
         <div className="activity-main">
           {VIEW_IDS.map((view) => {
-            const slot = slotOf(layout, view);
-            const active = slot !== null && layout.slots[slot].visible && layout.slots[slot].activeView === view;
+            const node = findViewNode(layout, view);
+            const active = node?.visible === true && node.activeView === view;
             return <button
               key={view}
               className={`activity-button ${active ? "active" : ""}`}
@@ -1980,28 +1939,15 @@ export function App(): ReactNode {
               onPointerDown={(event) => beginDockDrag(view, event)}
               onContextMenu={(event) => { event.preventDefault(); openViewMenu(view, event.clientX, event.clientY); }}
               onKeyDown={(event) => handleViewMenuKey(view, event)}
-              title={`${VIEW_LABELS[view]}（ドラッグで移動）`}
-              aria-label={VIEW_LABELS[view]}
-            ><AppIcon name={view === "outline" ? "files" : view} /><span className="activity-label" aria-hidden="true">{VIEW_LABELS[view]}</span></button>;
+              title={`${viewLabel(view)} (${t("ドラッグで移動")})`}
+              aria-label={viewLabel(view)}
+            ><AppIcon name={view === "outline" ? "files" : view} /><span className="activity-label" aria-hidden="true">{viewLabel(view)}</span></button>;
           })}
         </div>
-        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title="設定" aria-label="設定を開く"><AppIcon name="settings" /><span className="activity-label" aria-hidden="true">設定</span></button></div>
+        <div className="activity-foot"><button className="activity-button" onClick={() => openSettings("general")} title={t("設定")} aria-label={t("設定を開く")}><AppIcon name="settings" /><span className="activity-label" aria-hidden="true">{t("設定")}</span></button></div>
       </aside>}
 
-      {renderSlot("primary")}
-      {renderSlot("secondary")}
-
-      <section data-editor-pane className={`editor-groups split-${editorSession.split}`} style={{ gridColumn: columnFor("editor"), gridRow: 1 }} aria-label="本文エディター">
-        {editorSession.groups.map(renderEditorGroup)}
-      </section>
-
-      {renderSlot("bottom")}
-      {dockDrag !== null && <div className="dock-layer" aria-hidden="true">
-        <span className={`dock-target side-left ${dockDrag.target.kind === "side-edge" && dockDrag.target.side === "left" ? "active" : ""}`}>左</span>
-        <span className={`dock-target side-right ${dockDrag.target.kind === "side-edge" && dockDrag.target.side === "right" ? "active" : ""}`}>右</span>
-        <span className={`dock-target bottom ${dockDrag.target.kind === "bottom-edge" ? "active" : ""}`}>下部</span>
-        <span className="dock-ghost" style={{ transform: `translate(${dockDrag.x + 14}px, ${dockDrag.y + 14}px)` }}>{VIEW_LABELS[dockDrag.view]}</span>
-      </div>}
+      <div className="dock-root" style={{ gridColumn: activityVisible ? layout.activityBar === "left" ? 2 : 1 : 1, gridRow: 1 }}>{renderDockNode(layout.zenMode && editorDockNode !== null ? editorDockNode : layout.root)}</div>
     </div>
     <span className="layout-announcement" aria-live="polite">{layoutAnnouncement}</span>
   </div>{promptDialog}{settingsOverlay}{quickAccessOverlay}{viewMenu !== null && <div
@@ -2020,20 +1966,17 @@ export function App(): ReactNode {
       items[next]?.focus();
     }}
   >
-    <strong>{VIEW_LABELS[viewMenu.view]}</strong>
-    <button role="menuitem" onClick={() => moveMenuView("left")}>このビューを左へ</button>
-    <button role="menuitem" onClick={() => moveMenuView("right")}>このビューを右へ</button>
-    <button role="menuitem" onClick={() => moveMenuView("bottom")}>このビューを下部へ</button>
+    <strong>{viewLabel(viewMenu.view)}</strong>
+    <button role="menuitem" onClick={() => moveMenuView("left")}>{t("このビューを左へ")}</button>
+    <button role="menuitem" onClick={() => moveMenuView("right")}>{t("このビューを右へ")}</button>
+    <button role="menuitem" onClick={() => moveMenuView("top")}>{t("このビューを上へ")}</button>
+    <button role="menuitem" onClick={() => moveMenuView("bottom")}>{t("このビューを下部へ")}</button>
     <span className="menu-separator" />
-    <button role="menuitem" disabled={menuSlot === "bottom"} onClick={() => moveMenuPanel("left")}>このパネルを左へ</button>
-    <button role="menuitem" disabled={menuSlot === "bottom"} onClick={() => moveMenuPanel("right")}>このパネルを右へ</button>
-    <button role="menuitem" onClick={() => reorderMenuView(-1)}>タブを左へ</button>
-    <button role="menuitem" onClick={() => reorderMenuView(1)}>タブを右へ</button>
+    <button role="menuitem" onClick={() => reorderMenuView(-1)}>{t("タブを左へ")}</button>
+    <button role="menuitem" onClick={() => reorderMenuView(1)}>{t("タブを右へ")}</button>
     <span className="menu-separator" />
-    {menuSlot === "bottom" && <button role="menuitemcheckbox" aria-checked={layout.bottomPanelMaximized} onClick={() => { commitLayout({ ...layout, bottomPanelMaximized: !layout.bottomPanelMaximized }); setViewMenu(null); }}>{layout.bottomPanelMaximized ? "下部パネルを元の高さへ" : "下部パネルを最大化"}</button>}
-    {menuSlot === "bottom" && <button role="menuitem" onClick={() => { commitLayout({ ...layout, bottomPanelAlignment: layout.bottomPanelAlignment === "editor" ? "justify" : "editor" }); setViewMenu(null); }}>{layout.bottomPanelAlignment === "editor" ? "下部パネルを全幅へ" : "下部パネルを本文幅へ"}</button>}
-    {menuSlot !== null && <button role="menuitem" onClick={() => { const slot = layout.slots[menuSlot]; commitLayout({ ...layout, bottomPanelMaximized: menuSlot === "bottom" ? false : layout.bottomPanelMaximized, slots: { ...layout.slots, [menuSlot]: { ...slot, visible: false } } }, "パネルを閉じました"); setViewMenu(null); }}>パネルを閉じる</button>}
+    {menuNode !== null && <button role="menuitem" onClick={() => { commitLayout(toggleViewVisibility(layout, viewMenu!.view), t("パネルを閉じました")); setViewMenu(null); }}>{t("パネルを閉じる")}</button>}
     <span className="menu-separator" />
-    <button role="menuitem" onClick={() => { commitLayout(defaultLayout(), "レイアウトを既定へ戻しました"); setViewMenu(null); }}>既定レイアウトへ戻す</button>
-  </div>}</div>;
+    <button role="menuitem" onClick={() => { commitLayout(defaultLayout(), t("レイアウトを既定へ戻しました")); setViewMenu(null); }}>{t("既定レイアウトへ戻す")}</button>
+  </div>}</div></LocaleProvider>;
 }
