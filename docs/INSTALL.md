@@ -12,6 +12,14 @@ setup版は起動時に日本語またはEnglishを選べます。KOHON本体の
 
 署名されていないbuildではSmartScreenの警告が表示されます。Release本文の署名状態とchecksumを確認し、出所を確認できないbuildは実行しないでください。
 
+### Smart App Control にブロックされる場合
+
+Windows 11の**Smart App Control**が有効な環境では、未署名のinstallerを開いたときに「アプリケーション制御ポリシーによってこのファイルがブロックされました」と表示され、実行できません。これはKOHON側の不具合ではなく、OSが未署名・未評価の実行ファイルを拒否している状態です。
+
+- 自分で管理しているPC: 「設定 → プライバシーとセキュリティ → Windows セキュリティ → アプリとブラウザーの制御 → Smart App Control」でオフにすると実行できます。Smart App Controlは一度オフにするとWindowsの再インストールなしでは戻せない場合があります。
+- 組織管理のPC: Smart App ControlやAppLockerのポリシーは管理者が管理します。配布担当者へ署名済みbuildの提供を依頼してください。
+- 将来のbuildで警告をなくすには、Windows code-signing証明書でinstallerへ署名する必要があります。
+
 ## macOS Intel / Apple Silicon
 
 - Intel Mac: `KOHON_<version>_x64.dmg`

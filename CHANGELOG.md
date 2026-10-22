@@ -2,6 +2,13 @@
 
 All notable changes to KOHON are documented here.
 
+## 0.3.1 - 2026-10-23
+
+### Fixed
+
+- The Windows NSIS installer now uses the KOHON icon for the installer itself and its header instead of the default NSIS artwork.
+- Regenerated the Tauri icon set from the KOHON mark, so the Windows `.ico` carries 16/24/32/48/64/256 sizes and Explorer, the taskbar, and shortcuts pick a sharp icon.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed
