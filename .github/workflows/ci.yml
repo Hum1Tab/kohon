@@ -69,9 +69,11 @@ jobs:
           workspaces: apps/novel-editor/src-tauri
 
       - name: Install Linux build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Build the Tauri desktop binary
         run: pnpm --filter @kohon/editor-core build && pnpm --filter @kohon/project-store build && pnpm --filter @kohon/desktop exec tauri build --no-bundle
