@@ -96,12 +96,11 @@ my-novel/
 
 ## 開発
 
-必要環境はNode.js 24.17系とpnpm 11.19系です。
+必要環境はNode.js 24.17系、pnpm 11.19系、Rust stable（Tauri v2）です。
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm build
-pnpm start
+pnpm dev          # tauri dev: Rust backend + Vite renderer
 ```
 
 必要な型検査・回帰試験・production build:
@@ -116,6 +115,8 @@ Windows installerのlocal build:
 pnpm desktop:dist -- --bundles nsis
 ```
 
+`pnpm desktop:dist` はTauri CLIへ引数をそのまま渡します（`--bundles msi`、`--target x86_64-pc-windows-msvc` など）。Codex sidecarは`beforeBuildCommand`が自動でstagingします。
+
 ## 構成
 
 |場所|責任|
@@ -128,7 +129,7 @@ pnpm desktop:dist -- --bundles nsis
 |`packages/provider-openai`|利用者所有のOpenAI API接続|
 |`apps/gate-a-pilot`|generic回答とLensを比較した研究用companion|
 
-初期調査と旧Novel Lens時点の設計記録は`docs/`、`research/`、`specs/`に履歴として残しています。現在の再構築方針は[KOHON rebuild plan](./docs/kohon-rebuild-plan.md)を参照してください。
+初期調査と旧Novel Lens時点の設計記録は`docs/`、`research/`、`specs/`に履歴として残しています。現在の再構築方針は[KOHON rebuild plan](./docs/kohon-rebuild-plan.md)、desktopの移行内容は[Tauri v2 migration](./docs/tauri-migration.md)を参照してください。
 
 ## Release
 

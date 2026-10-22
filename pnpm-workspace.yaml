@@ -2,8 +2,9 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
-  electron-winstaller: true
   esbuild: true
+overrides:
+  fast-uri: 3.1.9
 minimumReleaseAgeExclude:
   - tsx@4.23.13
   - '@openai/codex@0.152.0-darwin-arm64 || 0.152.0-darwin-x64 || 0.152.0-linux-arm64 || 0.152.0-linux-x64 || 0.152.0-win32-arm64 || 0.152.0-win32-x64 || 0.152.0 || 0.160.1-darwin-arm64 || 0.160.1-darwin-x64 || 0.160.1-linux-arm64 || 0.160.1-linux-x64 || 0.160.1-win32-arm64 || 0.160.1-win32-x64 || 0.160.1'

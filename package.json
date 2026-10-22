@@ -15,7 +15,7 @@
     "clean": "pnpm -r run clean",
     "dev": "pnpm desktop:dev",
     "start": "pnpm desktop",
-    "desktop": "pnpm --filter @kohon/desktop start",
+    "desktop": "pnpm --filter @kohon/desktop dev",
     "desktop:dev": "pnpm --filter @kohon/editor-core build && pnpm --filter @kohon/project-store build && pnpm --filter @kohon/desktop dev",
     "desktop:dist": "node scripts/desktop-dist.mjs",
     "pilot:dev": "pnpm -r --workspace-concurrency=1 --filter './packages/*' build && pnpm --filter @kohon/gate-a-pilot dev",
