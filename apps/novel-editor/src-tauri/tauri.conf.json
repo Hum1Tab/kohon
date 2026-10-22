@@ -50,8 +50,7 @@
         "installMode": "currentUser",
         "languages": ["Japanese", "English"],
         "displayLanguageSelector": true,
-        "installerIcon": "icons/icon.ico",
-        "installerHeaderIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico"
       }
     },
     "macOS": {
